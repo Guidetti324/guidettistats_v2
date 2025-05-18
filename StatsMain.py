@@ -404,35 +404,41 @@ def tab_z_distribution():
         z_row_vals = np.round(np.arange(-3.4, 3.5, 0.1), 1)
         z_col_vals = np.round(np.arange(0.00, 0.10, 0.01), 2)
 
-        table_data = []
-        for z_r in z_row_vals:
-            row = { 'z': f"{z_r:.1f}" } # Row header
-            for z_c in z_col_vals:
-                current_z = round(z_r + z_c, 2)
-                prob = stats.norm.cdf(current_z)
-                row[f"{z_c:.2f}"] = format_value_for_display(prob, decimals=4)
-            table_data.append(row)
+        table_data_z_lookup = []
+        for z_r_val in z_row_vals:
+            row = { 'z': f"{z_r_val:.1f}" } 
+            for z_c_val in z_col_vals:
+                current_z_val = round(z_r_val + z_c_val, 2)
+                prob = stats.norm.cdf(current_z_val)
+                row[f"{z_c_val:.2f}"] = format_value_for_display(prob, decimals=4)
+            table_data_z_lookup.append(row)
         
-        df_z_table = pd.DataFrame(table_data).set_index('z')
+        df_z_lookup_table = pd.DataFrame(table_data_z_lookup).set_index('z')
 
-        def style_z_table(df_to_style):
-            style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+        def style_z_lookup_table(df_to_style):
+            data = df_to_style # DataFrame is passed directly
+            style = pd.DataFrame('', index=data.index, columns=data.columns)
             
-            # Find closest row (z integer and first decimal)
-            z_lookup_base = float(f"{z_lookup_val:.1f}") # e.g., 1.23 -> 1.2
-            closest_row_label = min(df_to_style.index, key=lambda x_label: abs(float(x_label) - z_lookup_base))
+            try:
+                z_lookup_base_float = float(f"{z_lookup_val:.1f}") # e.g., 1.23 -> 1.2
+                closest_row_label_str = min(data.index, key=lambda x_label: abs(float(x_label) - z_lookup_base_float))
 
-            # Find closest column (second decimal)
-            z_lookup_second_decimal = round(z_lookup_val - float(closest_row_label), 2)
-            closest_col_label = min(df_to_style.columns, key=lambda c_label: abs(float(c_label) - z_lookup_second_decimal))
+                z_lookup_second_decimal_target = round(z_lookup_val - float(closest_row_label_str), 2)
+                
+                col_labels_float = [float(col_str) for col_str in data.columns]
+                closest_col_idx = np.argmin(np.abs(np.array(col_labels_float) - z_lookup_second_decimal_target))
+                closest_col_label_str = data.columns[closest_col_idx]
 
-            if closest_row_label in df_to_style.index and closest_col_label in df_to_style.columns:
-                style.loc[closest_row_label, closest_col_label] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+                if closest_row_label_str in data.index and closest_col_label_str in data.columns:
+                    style.loc[closest_row_label_str, closest_col_label_str] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+            except Exception as e:
+                # st.error(f"Error in z-table styling: {e}") # Optional: for debugging
+                pass # Gracefully skip highlighting if there's an issue
             return style
         
-        st.markdown(df_z_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
-                                                       {'selector': 'td', 'props': [('text-align', 'center')]}])
-                                     .apply(style_z_table, axis=None).to_html(), unsafe_allow_html=True)
+        st.markdown(df_z_lookup_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
+                                                               {'selector': 'td', 'props': [('text-align', 'center')]}])
+                                     .apply(style_z_lookup_table, axis=None).to_html(), unsafe_allow_html=True)
         st.caption(f"Table shows P(Z < z). Highlighted cell is closest to your entered z-lookup value of {z_lookup_val:.2f}.")
 
 
@@ -482,7 +488,6 @@ def tab_z_distribution():
 
 
 # --- Tab 3: F-distribution (Fully Implemented) ---
-# (Code from previous correct version, ensuring robustness)
 def tab_f_distribution():
     st.header("F-Distribution Explorer")
     col1, col2 = st.columns([2, 1.5])
@@ -508,7 +513,7 @@ def tab_f_distribution():
             plot_max_f = max(stats.f.ppf(0.999, df1_f_selected, df2_f_selected), test_stat_f * 1.5, 5.0)
             if test_stat_f > stats.f.ppf(0.999, df1_f_selected, df2_f_selected) * 1.2 : 
                 plot_max_f = test_stat_f * 1.2
-        except Exception: # Catch potential errors with ppf if df are extreme
+        except Exception: 
             pass
 
 
@@ -790,42 +795,150 @@ def tab_chi_square_distribution():
         """)
 
 
-# --- Mann-Whitney U, Wilcoxon, Binomial, Tukey, Kruskal-Wallis, Friedman ---
-# These will use the corrected summary logic from the last iteration.
-# The table structures will be:
-# - MW & Wilcoxon: z-critical value table (like the one in tab_z_distribution)
-# - Binomial: Probability table (P(X=k), CDF, SF)
-# - Tukey: q-critical values (df_error rows, k columns, for selected alpha)
-# - Kruskal-Wallis & Friedman: Chi-square critical value table (like in tab_chi_square_distribution)
-
-# For brevity, the full code for these is extensive.
-# The key changes for Kruskal-Wallis and Friedman summaries from the previous version
-# involved ensuring p_val_calc_..._num and crit_val_..._display_str are robustly handled.
-# The other tabs (MW, Wilcoxon, Binomial, Tukey) would follow the same principles for their
-# specific table types and summary statistics.
-
-# (Copying the corrected KW and Friedman from the previous good version, and stubs for others)
-
-def tab_mann_whitney_u(): # Placeholder - Needs full table and summary implementation
+# --- Tab 5: Mann-Whitney U Test ---
+def tab_mann_whitney_u():
     st.header("Mann-Whitney U Test (Normal Approximation)")
-    st.write("Mann-Whitney U Test table (z-table snippet) and logic to be fully implemented per new requirements.")
-    # ... (Full implementation needed here, using a z-critical value table similar to tab_z_distribution)
+    col1, col2 = st.columns([2, 1.5])
 
-def tab_wilcoxon_t(): # Placeholder - Needs full table and summary implementation
+    with col1:
+        st.subheader("Inputs")
+        alpha_mw = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_mw_input")
+        n1_mw = st.number_input("Sample Size Group 1 (n1)", 1, 1000, 10, 1, key="n1_mw_input") 
+        n2_mw = st.number_input("Sample Size Group 2 (n2)", 1, 1000, 12, 1, key="n2_mw_input") 
+        tail_mw = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_mw_radio")
+        u_stat_mw = st.number_input("Calculated U-statistic", value=float(n1_mw*n2_mw/2), format="%.1f", min_value=0.0, max_value=float(n1_mw*n2_mw), key="u_stat_mw_input")
+        st.caption("Note: Normal approximation is best for n1, n2 > ~10. U is typically the smaller of U1 or U2.")
+
+        mu_u = (n1_mw * n2_mw) / 2
+        sigma_u_sq = (n1_mw * n2_mw * (n1_mw + n2_mw + 1)) / 12
+        sigma_u = np.sqrt(sigma_u_sq) if sigma_u_sq > 0 else 0
+        
+        z_calc_mw = 0.0
+        if sigma_u > 0:
+            if u_stat_mw < mu_u:
+                z_calc_mw = (u_stat_mw + 0.5 - mu_u) / sigma_u
+            elif u_stat_mw > mu_u:
+                z_calc_mw = (u_stat_mw - 0.5 - mu_u) / sigma_u
+            else: 
+                z_calc_mw = 0.0 
+        else: 
+            z_calc_mw = 0.0
+            if n1_mw > 0 and n2_mw > 0: st.warning("Standard deviation (σ_U) is zero. Check sample sizes. z_calc set to 0.")
+
+
+        st.markdown(f"**Normal Approximation Parameters:** μ<sub>U</sub> = {mu_u:.2f}, σ<sub>U</sub> = {sigma_u:.2f}")
+        st.markdown(f"**Calculated z-statistic (from U, with continuity correction):** {z_calc_mw:.3f}")
+
+        st.subheader("Standard Normal Distribution Plot (for z_calc)")
+        # ... (Plotting code similar to z-distribution tab, using z_calc_mw and alpha_mw)
+        fig_mw, ax_mw = plt.subplots(figsize=(8,5))
+        plot_min_z_mw = min(stats.norm.ppf(0.0001), z_calc_mw - 2, -4.0)
+        plot_max_z_mw = max(stats.norm.ppf(0.9999), z_calc_mw + 2, 4.0)
+        # ... (rest of plot code)
+        x_norm_mw = np.linspace(plot_min_z_mw, plot_max_z_mw, 500)
+        y_norm_mw = stats.norm.pdf(x_norm_mw)
+        ax_mw.plot(x_norm_mw, y_norm_mw, 'b-', lw=2, label='Standard Normal Distribution')
+        # ... (Highlight critical regions based on alpha_mw and tail_mw)
+        ax_mw.axvline(z_calc_mw, color='green', linestyle='-', lw=2, label=f'z_calc = {z_calc_mw:.3f}')
+        ax_mw.legend(); ax_mw.grid(True); st.pyplot(fig_mw)
+
+
+        st.subheader("Critical z-Values (Upper Tail) for Approximation")
+        # Display a standard z-critical value table snippet
+        table_alpha_cols_z_crit = [0.10, 0.05, 0.025, 0.01, 0.005]
+        z_crit_table_rows = [{'Distribution': 'z (Standard Normal)'}]
+        for alpha_c in table_alpha_cols_z_crit:
+            z_crit_table_rows[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
+        df_z_crit_table_mw = pd.DataFrame(z_crit_table_rows).set_index('Distribution')
+        
+        def style_z_crit_table_mw(df_to_style):
+            style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+            target_alpha_for_col = alpha_mw
+            if tail_mw == "Two-tailed": target_alpha_for_col = alpha_mw / 2.0
+            closest_alpha_col = min(table_alpha_cols_z_crit, key=lambda x: abs(x - target_alpha_for_col))
+            highlight_col = f"α = {closest_alpha_col:.3f}"
+            if highlight_col in df_to_style.columns:
+                style.loc[:, highlight_col] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+            return style
+
+        st.markdown(df_z_crit_table_mw.style.apply(style_z_crit_table_mw, axis=None).to_html(), unsafe_allow_html=True)
+        st.caption("Compare your calculated z-statistic to these critical z-values.")
+
+
+    with col2: # Summary for Mann-Whitney U
+        st.subheader("P-value Calculation Explanation")
+        st.markdown(f"""
+        The U statistic ({u_stat_mw:.1f}) is converted to a z-statistic ({z_calc_mw:.3f}) using μ<sub>U</sub>={mu_u:.2f}, σ<sub>U</sub>={sigma_u:.2f} (with continuity correction). The p-value is from the standard normal distribution based on this z_calc_mw.
+        * **Two-tailed**: `2 * P(Z ≥ |{z_calc_mw:.3f}|)`
+        * **One-tailed (right)**: `P(Z ≥ {z_calc_mw:.3f})` 
+        * **One-tailed (left)**: `P(Z ≤ {z_calc_mw:.3f})` 
+        """)
+
+        st.subheader("Summary")
+        p_val_mw_one_right = stats.norm.sf(z_calc_mw)
+        p_val_mw_one_left = stats.norm.cdf(z_calc_mw)
+        p_val_mw_two = 2 * stats.norm.sf(abs(z_calc_mw))
+        p_val_mw_two = min(p_val_mw_two, 1.0)
+
+        crit_val_z_upper_mw_summary, crit_val_z_lower_mw_summary = None, None
+        if tail_mw == "Two-tailed":
+            crit_val_z_upper_mw_summary = stats.norm.ppf(1 - alpha_mw / 2)
+        elif tail_mw == "One-tailed (right)":
+            crit_val_z_upper_mw_summary = stats.norm.ppf(1 - alpha_mw)
+        else: # One-tailed (left)
+            crit_val_z_lower_mw_summary = stats.norm.ppf(alpha_mw)
+        
+        crit_val_z_display_mw = "N/A"
+        if tail_mw == "Two-tailed":
+            crit_val_z_display_mw = f"±{format_value_for_display(crit_val_z_upper_mw_summary)}" if crit_val_z_upper_mw_summary is not None else "N/A"
+            p_val_calc_mw = p_val_mw_two
+            decision_crit_mw = abs(z_calc_mw) > crit_val_z_upper_mw_summary if crit_val_z_upper_mw_summary is not None and not np.isnan(crit_val_z_upper_mw_summary) else False
+        elif tail_mw == "One-tailed (right)":
+            crit_val_z_display_mw = format_value_for_display(crit_val_z_upper_mw_summary) if crit_val_z_upper_mw_summary is not None else "N/A"
+            p_val_calc_mw = p_val_mw_one_right
+            decision_crit_mw = z_calc_mw > crit_val_z_upper_mw_summary if crit_val_z_upper_mw_summary is not None and not np.isnan(crit_val_z_upper_mw_summary) else False
+        else: # One-tailed (left)
+            crit_val_z_display_mw = format_value_for_display(crit_val_z_lower_mw_summary) if crit_val_z_lower_mw_summary is not None else "N/A"
+            p_val_calc_mw = p_val_mw_one_left
+            decision_crit_mw = z_calc_mw < crit_val_z_lower_mw_summary if crit_val_z_lower_mw_summary is not None and not np.isnan(crit_val_z_lower_mw_summary) else False
+        
+        comparison_crit_str_mw = f"z_calc ({z_calc_mw:.3f}) vs z_crit ({crit_val_z_display_mw})" # Simplified
+        decision_p_alpha_mw = p_val_calc_mw < alpha_mw
+        
+        st.markdown(f"""
+        1.  **Critical z-value ({tail_mw})**: {crit_val_z_display_mw}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_mw:.4f}
+        2.  **Calculated U-statistic**: {u_stat_mw:.1f} (Converted z-statistic: {z_calc_mw:.3f})
+            * *Calculated p-value (from z_calc)*: {format_value_for_display(p_val_calc_mw, decimals=4)} ({apa_p_value(p_val_calc_mw)})
+        3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_mw else 'not rejected'}**.
+            * *Reason*: {comparison_crit_str_mw}.
+        4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_mw else 'not rejected'}**.
+            * *Reason*: {apa_p_value(p_val_calc_mw)} is {'less than' if decision_p_alpha_mw else 'not less than'} α ({alpha_mw:.4f}).
+        5.  **APA 7 Style Report (based on z-approximation)**:
+            A Mann-Whitney U test indicated that the outcome for group 1 (n<sub>1</sub>={n1_mw}) was {'' if decision_p_alpha_mw else 'not '}statistically significantly different from group 2 (n<sub>2</sub>={n2_mw}), *U* = {u_stat_mw:.1f}, *z* = {z_calc_mw:.2f}, {apa_p_value(p_val_calc_mw)}. The null hypothesis was {'rejected' if decision_p_alpha_mw else 'not rejected'} at α = {alpha_mw:.2f}.
+        """)
+
+# --- Wilcoxon Signed-Rank T Test ---
+def tab_wilcoxon_t():
     st.header("Wilcoxon Signed-Rank T Test (Normal Approximation)")
-    st.write("Wilcoxon Signed-Rank T Test table (z-table snippet) and logic to be fully implemented per new requirements.")
-    # ... (Full implementation needed here, using a z-critical value table similar to tab_z_distribution)
+    # ... (Implementation will be very similar to Mann-Whitney U, using its own formulas for mu_T and sigma_T)
+    st.write("Wilcoxon Signed-Rank T Test implementation is pending.")
 
-def tab_binomial_test(): # Placeholder - Needs full table and summary implementation
+
+# --- Binomial Test ---
+def tab_binomial_test():
     st.header("Binomial Test Explorer")
-    st.write("Binomial Test probability table and logic to be fully implemented per new requirements.")
-    # ... (Full implementation needed here, with P(X=k), CDF, SF table)
+    # ... (Implementation with probability table as before, ensuring formatting and clarity)
+    st.write("Binomial Test implementation is pending.")
 
-def tab_tukey_hsd(): # Placeholder - Needs full table and summary implementation
+# --- Tukey HSD ---
+def tab_tukey_hsd():
     st.header("Tukey HSD (Honestly Significant Difference) Explorer")
-    st.write("Tukey HSD table and logic to be fully implemented per new requirements.")
-    # ... (Full implementation needed here, q-crit table: df_error rows, k cols for selected alpha)
+    # ... (Implementation with q-critical value table: df_error rows, k columns for selected alpha)
+    st.write("Tukey HSD implementation is pending.")
 
+
+# --- Kruskal-Wallis H Test (Corrected Summary) ---
 def tab_kruskal_wallis():
     st.header("Kruskal-Wallis H Test (Chi-square Approximation)")
     col1, col2 = st.columns([2, 1.5])
@@ -844,6 +957,8 @@ def tab_kruskal_wallis():
         crit_val_chi2_kw_plot = None 
         
         if df_kw > 0:
+            # ... (Plotting code as before, ensure crit_val_chi2_kw_plot is correctly assigned)
+            crit_val_chi2_kw_plot = stats.chi2.ppf(1 - alpha_kw, df_kw)
             plot_min_chi2_kw = 0.001
             plot_max_chi2_kw = max(stats.chi2.ppf(0.999, df_kw), test_stat_h_kw * 1.5, 10.0)
             if test_stat_h_kw > stats.chi2.ppf(0.999, df_kw) * 1.2:
@@ -853,7 +968,6 @@ def tab_kruskal_wallis():
             y_chi2_kw_plot = stats.chi2.pdf(x_chi2_kw_plot, df_kw)
             ax_kw.plot(x_chi2_kw_plot, y_chi2_kw_plot, 'b-', lw=2, label=f'χ²-distribution (df={df_kw})')
 
-            crit_val_chi2_kw_plot = stats.chi2.ppf(1 - alpha_kw, df_kw) 
             if isinstance(crit_val_chi2_kw_plot, (int, float)) and not np.isnan(crit_val_chi2_kw_plot):
                 x_fill_upper_kw = np.linspace(crit_val_chi2_kw_plot, plot_max_chi2_kw, 100)
                 ax_kw.fill_between(x_fill_upper_kw, stats.chi2.pdf(x_fill_upper_kw, df_kw), color='red', alpha=0.5, label=f'α = {alpha_kw:.4f}')
@@ -884,7 +998,7 @@ def tab_kruskal_wallis():
 
         def style_chi2_table_kw(df_to_style):
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-            selected_df_str = str(df_kw) # User's calculated df
+            selected_df_str = str(df_kw) 
 
             closest_df_row_val = min(table_df_options_chi2, key=lambda x: abs(x - df_kw)) if df_kw > 0 else None
             closest_df_row_str = str(closest_df_row_val) if closest_df_row_val is not None else None
@@ -924,15 +1038,16 @@ def tab_kruskal_wallis():
         * `P(χ² ≥ {test_stat_h_kw:.3f}) = stats.chi2.sf({test_stat_h_kw:.3f}, df={df_kw})` (if df > 0)
         """)
         st.subheader("Summary")
-        p_val_calc_kw_num = float('nan')
+        p_val_calc_kw_num = float('nan') 
         decision_crit_kw = False
         comparison_crit_str_kw = "Test not valid (df must be > 0)"
         decision_p_alpha_kw = False
         apa_H_stat = f"*H*({df_kw if df_kw > 0 else 'N/A'}) = {format_value_for_display(test_stat_h_kw, decimals=2)}"
+        
         summary_crit_val_chi2_kw_display_str = "N/A (df=0)"
-
         if df_kw > 0:
-            p_val_calc_kw_num = stats.chi2.sf(test_stat_h_kw, df_kw)
+            p_val_calc_kw_num = stats.chi2.sf(test_stat_h_kw, df_kw) 
+            
             if isinstance(crit_val_chi2_kw_plot, (int, float)) and not np.isnan(crit_val_chi2_kw_plot):
                 summary_crit_val_chi2_kw_display_str = format_value_for_display(crit_val_chi2_kw_plot)
                 decision_crit_kw = test_stat_h_kw > crit_val_chi2_kw_plot
@@ -946,6 +1061,7 @@ def tab_kruskal_wallis():
         
         p_val_calc_kw_num_display_str = format_value_for_display(p_val_calc_kw_num, decimals=4)
         apa_p_val_calc_kw_str = apa_p_value(p_val_calc_kw_num)
+
 
         st.markdown(f"""
         1.  **Critical χ²-value (df={df_kw})**: {summary_crit_val_chi2_kw_display_str}
