@@ -7,6 +7,7 @@ from io import StringIO # For reading CSV string
 
 # Helper function to create APA style p-value string
 def apa_p_value(p_val):
+    # Ensure p_val is a float or int before checking isnan, otherwise np.isnan can fail
     if not isinstance(p_val, (int, float)) or np.isnan(p_val):
         return "p N/A"
     
@@ -225,33 +226,50 @@ def tab_t_distribution():
                 
                 formatted_cv = f"{crit_val_for_col:.3f}" if not np.isnan(crit_val_for_col) else "N/A"
                 row_dict[f"α₁={one_alpha_col_val:.4f}"] = formatted_cv
+                # For the two-tail column, the value is the same (it's t_alpha/2), but the header indicates 2*alpha
                 row_dict[f"α₂={one_alpha_col_val*2:.4f}"] = formatted_cv 
             df_display_table_rows.append(row_dict)
 
         df_t_table_display = pd.DataFrame(df_display_table_rows).set_index('df')
 
-        def highlight_t_table_flat(styled_df):
-            data = styled_df.data
+        # Styling function
+        def highlight_t_table_flat(dataframe_to_style): # Renamed arg for clarity
+            # When Styler.apply is used with axis=None, the function receives the DataFrame.
+            data = dataframe_to_style 
             attr_df = pd.DataFrame('', index=data.index, columns=data.columns)
-            selected_df_str = str(df_t_display) 
+            selected_df_str = str(df_t_display) # df_t_display is from the selectbox
 
+            # Highlight selected DF row
             if selected_df_str in data.index:
                 attr_df.loc[selected_df_str, :] = 'background-color: lightblue;'
             
-            target_alpha_for_style = alpha_t 
-            highlight_col_name = None 
+            target_alpha_for_style = alpha_t # User's input alpha
+            highlight_col_name = None # The column name in df_t_table_display to highlight
             
             if tail_t == "Two-tailed":
-                closest_two_tail_header_alpha = min([a*2 for a in one_tail_alphas_cols], key=lambda x:abs(x-target_alpha_for_style))
-                highlight_col_name = f'α₂={closest_two_tail_header_alpha:.4f}'
-            else: 
-                closest_one_tail_header_alpha = min(one_tail_alphas_cols, key=lambda x:abs(x-target_alpha_for_style))
-                highlight_col_name = f'α₁={closest_one_tail_header_alpha:.4f}'
+                # User's alpha_t is the two-tail alpha. Find the column header α₂=alpha_t
+                # The actual critical value comes from one-tailed alpha_t/2
+                
+                # Find the two-tail column header closest to user's alpha_t
+                closest_two_tail_header_alpha_val = min([a*2 for a in one_tail_alphas_cols], key=lambda x:abs(x-target_alpha_for_style))
+                highlight_col_name = f'α₂={closest_two_tail_header_alpha_val:.4f}'
 
+            else: # One-tailed
+                # User's alpha_t is the one-tail alpha. Find the column header α₁=alpha_t
+                closest_one_tail_header_alpha_val = min(one_tail_alphas_cols, key=lambda x:abs(x-target_alpha_for_style))
+                highlight_col_name = f'α₁={closest_one_tail_header_alpha_val:.4f}'
+
+            # Apply column and cell highlighting
             if highlight_col_name and highlight_col_name in data.columns:
-                attr_df.loc[:, highlight_col_name] = attr_df.loc[:, highlight_col_name].astype(str) + ' background-color: lightgreen;'
+                # Apply style to the entire column first
+                for r_idx in data.index: # Iterate over all rows for this column
+                    current_style = attr_df.loc[r_idx, highlight_col_name]
+                    attr_df.loc[r_idx, highlight_col_name] = (current_style if current_style else '') + ' background-color: lightgreen;'
+
+                # Then, apply specific style to the cell
                 if selected_df_str in data.index:
-                    attr_df.loc[selected_df_str, highlight_col_name] += ' font-weight: bold; border: 2px solid red;'
+                    current_cell_style = attr_df.loc[selected_df_str, highlight_col_name]
+                    attr_df.loc[selected_df_str, highlight_col_name] = (current_cell_style if current_cell_style else '') + ' font-weight: bold; border: 2px solid red;'
             
             return attr_df
 
@@ -1437,7 +1455,6 @@ def tab_kruskal_wallis():
 
         st.subheader("Chi-square Distribution Plot (Approximation for H)")
         fig_kw, ax_kw = plt.subplots(figsize=(8,5))
-        # Initialize crit_val_chi2_kw for use in summary even if df_kw is 0
         crit_val_chi2_kw = None 
         
         if df_kw > 0:
@@ -1450,7 +1467,7 @@ def tab_kruskal_wallis():
             y_chi2_kw = stats.chi2.pdf(x_chi2_kw, df_kw)
             ax_kw.plot(x_chi2_kw, y_chi2_kw, 'b-', lw=2, label=f'χ²-distribution (df={df_kw})')
 
-            crit_val_chi2_kw = stats.chi2.ppf(1 - alpha_kw, df_kw) # This is the numeric critical value
+            crit_val_chi2_kw = stats.chi2.ppf(1 - alpha_kw, df_kw) 
             if isinstance(crit_val_chi2_kw, (int, float)) and not np.isnan(crit_val_chi2_kw):
                 x_fill_upper_kw = np.linspace(crit_val_chi2_kw, plot_max_chi2_kw, 100)
                 ax_kw.fill_between(x_fill_upper_kw, stats.chi2.pdf(x_fill_upper_kw, df_kw), color='red', alpha=0.5, label=f'α = {alpha_kw:.4f}')
@@ -1511,22 +1528,18 @@ def tab_kruskal_wallis():
         decision_p_alpha_kw = False
         apa_H_stat = f"*H*({df_kw if df_kw > 0 else 'N/A'}) = {test_stat_h_kw:.2f}"
         
-        # Determine critical value display string for summary
         summary_crit_val_chi2_kw_display_str = "N/A (df=0)"
         if df_kw > 0:
+            p_val_calc_kw_num = stats.chi2.sf(test_stat_h_kw, df_kw) 
+            
             # crit_val_chi2_kw was calculated in plot section if df_kw > 0
             if isinstance(crit_val_chi2_kw, (int, float)) and not np.isnan(crit_val_chi2_kw):
                 summary_crit_val_chi2_kw_display_str = f"{crit_val_chi2_kw:.3f}"
-            else:
-                 summary_crit_val_chi2_kw_display_str = "N/A (calc error)"
-
-            p_val_calc_kw_num = stats.chi2.sf(test_stat_h_kw, df_kw)
-            
-            if isinstance(crit_val_chi2_kw, (int,float)) and not np.isnan(crit_val_chi2_kw) :
                 decision_crit_kw = test_stat_h_kw > crit_val_chi2_kw
                 comparison_crit_str_kw = f"H({test_stat_h_kw:.3f}) > χ²_crit({crit_val_chi2_kw:.3f})" if decision_crit_kw else f"H({test_stat_h_kw:.3f}) ≤ χ²_crit({crit_val_chi2_kw:.3f})"
-            else: 
-                comparison_crit_str_kw = "Comparison not possible (critical value is N/A or NaN)"
+            else:
+                 summary_crit_val_chi2_kw_display_str = "N/A (calc error)"
+                 comparison_crit_str_kw = "Comparison not possible (critical value is N/A or NaN)"
             
             if isinstance(p_val_calc_kw_num, (int, float)) and not np.isnan(p_val_calc_kw_num):
                 decision_p_alpha_kw = p_val_calc_kw_num < alpha_kw
@@ -1578,10 +1591,7 @@ def tab_friedman_test():
         st.subheader("Chi-square Distribution Plot (Approximation for Q)")
         fig_fr, ax_fr = plt.subplots(figsize=(8,5))
         crit_val_chi2_fr = None 
-        # Initialize for summary, will be updated if df_fr > 0 and calc is valid
-        summary_crit_val_chi2_fr_display_str = "N/A (df=0)" 
-
-
+        
         if df_fr > 0:
             plot_min_chi2_fr = 0.001
             plot_max_chi2_fr = max(stats.chi2.ppf(0.999, df_fr), test_stat_q_fr * 1.5, 10.0)
@@ -1592,16 +1602,12 @@ def tab_friedman_test():
             y_chi2_fr = stats.chi2.pdf(x_chi2_fr, df_fr)
             ax_fr.plot(x_chi2_fr, y_chi2_fr, 'b-', lw=2, label=f'χ²-distribution (df={df_fr})')
 
-            crit_val_chi2_fr = stats.chi2.ppf(1 - alpha_fr, df_fr) # Numeric crit_val for logic
-            # Update display string for plot
-            plot_crit_val_chi2_fr_display_str = "N/A (calc error)"
+            crit_val_chi2_fr = stats.chi2.ppf(1 - alpha_fr, df_fr) 
             if isinstance(crit_val_chi2_fr, (int,float)) and not np.isnan(crit_val_chi2_fr):
-                plot_crit_val_chi2_fr_display_str = f"{crit_val_chi2_fr:.3f}"
                 x_fill_upper_fr = np.linspace(crit_val_chi2_fr, plot_max_chi2_fr, 100)
                 ax_fr.fill_between(x_fill_upper_fr, stats.chi2.pdf(x_fill_upper_fr, df_fr), color='red', alpha=0.5, label=f'α = {alpha_fr:.4f}')
-                ax_fr.axvline(crit_val_chi2_fr, color='red', linestyle='--', lw=1, label=f'χ²_crit = {plot_crit_val_chi2_fr_display_str}')
-
-
+                ax_fr.axvline(crit_val_chi2_fr, color='red', linestyle='--', lw=1, label=f'χ²_crit = {crit_val_chi2_fr:.3f}')
+            
             ax_fr.axvline(test_stat_q_fr, color='green', linestyle='-', lw=2, label=f'Q_calc = {test_stat_q_fr:.3f}')
             ax_fr.set_title(f'χ²-Approximation for Friedman Q (df={df_fr})')
             ax_fr.set_xlabel('χ²-value / Q-statistic')
@@ -1657,27 +1663,17 @@ def tab_friedman_test():
         decision_p_alpha_fr = False
         apa_Q_stat = f"χ²<sub>r</sub>({df_fr if df_fr > 0 else 'N/A'}) = {test_stat_q_fr:.2f}"
         
-        # Determine critical value display string for summary section
         summary_crit_val_chi2_fr_display_str = "N/A (df=0)"
         if df_fr > 0:
+            p_val_calc_fr_num = stats.chi2.sf(test_stat_q_fr, df_fr) 
+            
             # crit_val_chi2_fr was calculated in plot section if df_fr > 0
             if isinstance(crit_val_chi2_fr, (int,float)) and not np.isnan(crit_val_chi2_fr):
                 summary_crit_val_chi2_fr_display_str = f"{crit_val_chi2_fr:.3f}"
-            else: # If it's still None or NaN from plot section (e.g. error in ppf)
-                temp_crit_val = stats.chi2.ppf(1 - alpha_fr, df_fr) # Try to get it again
-                if isinstance(temp_crit_val, (int,float)) and not np.isnan(temp_crit_val):
-                    summary_crit_val_chi2_fr_display_str = f"{temp_crit_val:.3f}"
-                    crit_val_chi2_fr = temp_crit_val # Update for logic below
-                else:
-                    summary_crit_val_chi2_fr_display_str = "N/A (calc error)"
-                    crit_val_chi2_fr = None # Ensure it's None for logic
-
-            p_val_calc_fr_num = stats.chi2.sf(test_stat_q_fr, df_fr)
-            
-            if crit_val_chi2_fr is not None and isinstance(crit_val_chi2_fr, (int,float)) and not np.isnan(crit_val_chi2_fr):
                 decision_crit_fr = test_stat_q_fr > crit_val_chi2_fr
                 comparison_crit_str_fr = f"Q({test_stat_q_fr:.3f}) > χ²_crit({crit_val_chi2_fr:.3f})" if decision_crit_fr else f"Q({test_stat_q_fr:.3f}) ≤ χ²_crit({crit_val_chi2_fr:.3f})"
             else: 
+                summary_crit_val_chi2_fr_display_str = "N/A (calc error)"
                 comparison_crit_str_fr = "Comparison not possible (critical value is N/A or NaN)"
 
             if isinstance(p_val_calc_fr_num, (int, float)) and not np.isnan(p_val_calc_fr_num):
@@ -1685,8 +1681,7 @@ def tab_friedman_test():
             # else decision_p_alpha_fr remains False
         elif df_fr <=0 :
              apa_Q_stat = f"χ²<sub>r</sub> = {test_stat_q_fr:.2f} (df={df_fr}, test invalid)"
-        
-        # Prepare display strings safely
+
         p_val_calc_fr_num_display_str = "N/A" 
         if isinstance(p_val_calc_fr_num, (int, float)) and not np.isnan(p_val_calc_fr_num):
             try:
