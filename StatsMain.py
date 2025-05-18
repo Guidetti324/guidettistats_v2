@@ -337,23 +337,23 @@ def tab_z_distribution():
     col1, col2 = st.columns([2, 1.5])
 
     with col1:
-        st.subheader("Inputs")
-        alpha_z_input = st.number_input("Alpha (α) for hypothesis test", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_z_input_hyp")
-        tail_z = st.radio("Tail Selection (for hypothesis test)", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_z_radio_hyp")
-        test_stat_z = st.number_input("Your Calculated z-statistic (for p-value & decision)", value=0.0, format="%.3f", key="test_stat_z_input_hyp")
+        st.subheader("Inputs for Hypothesis Test")
+        alpha_z_hyp = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_z_hyp")
+        tail_z_hyp = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_z_hyp")
+        test_stat_z_hyp = st.number_input("Your Calculated z-statistic", value=0.0, format="%.3f", key="test_stat_z_hyp")
         
-        # Input for z-score lookup in the table
-        z_lookup_val = st.number_input("Enter z-score for Table Lookup (P(Z < z))", -3.9, 3.9, 0.0, 0.01, format="%.2f", key="z_lookup_input")
+        st.subheader("Inputs for z-Table Lookup")
+        z_lookup_val = st.number_input("Enter z-score for Table Lookup (P(Z < z))", -3.99, 3.99, 0.00, 0.01, format="%.2f", key="z_lookup_input_val")
 
 
         st.subheader("Distribution Plot")
         fig_z, ax_z = plt.subplots(figsize=(8,5))
         
-        plot_min_z = min(stats.norm.ppf(0.00001), test_stat_z - 2, z_lookup_val -2, -4.0) # Adjusted range for z_lookup_val
-        plot_max_z = max(stats.norm.ppf(0.99999), test_stat_z + 2, z_lookup_val +2, 4.0) # Adjusted range
-        if abs(test_stat_z) > 4 or abs(z_lookup_val) > 4 : # Ensure test stat is visible if it's an outlier
-            plot_min_z = min(plot_min_z, test_stat_z -1, z_lookup_val -1)
-            plot_max_z = max(plot_max_z, test_stat_z +1, z_lookup_val +1)
+        plot_min_z = min(stats.norm.ppf(0.00001), test_stat_z_hyp - 2, z_lookup_val -2, -4.0) 
+        plot_max_z = max(stats.norm.ppf(0.99999), test_stat_z_hyp + 2, z_lookup_val +2, 4.0) 
+        if abs(test_stat_z_hyp) > 4 or abs(z_lookup_val) > 4 : 
+            plot_min_z = min(plot_min_z, test_stat_z_hyp -1, z_lookup_val -1)
+            plot_max_z = max(plot_max_z, test_stat_z_hyp +1, z_lookup_val +1)
 
         x_z_plot = np.linspace(plot_min_z, plot_max_z, 500)
         y_z_plot = stats.norm.pdf(x_z_plot)
@@ -365,10 +365,10 @@ def tab_z_distribution():
         ax_z.axvline(z_lookup_val, color='orange', linestyle=':', lw=2, label=f'z_lookup = {z_lookup_val:.2f}')
 
 
-        crit_val_z_upper_plot, crit_val_z_lower_plot = None, None # For hypothesis test critical region
-        if tail_z == "Two-tailed":
-            crit_val_z_upper_plot = stats.norm.ppf(1 - alpha_z_input / 2)
-            crit_val_z_lower_plot = stats.norm.ppf(alpha_z_input / 2)
+        crit_val_z_upper_plot, crit_val_z_lower_plot = None, None 
+        if tail_z_hyp == "Two-tailed":
+            crit_val_z_upper_plot = stats.norm.ppf(1 - alpha_z_hyp / 2)
+            crit_val_z_lower_plot = stats.norm.ppf(alpha_z_hyp / 2)
             if crit_val_z_upper_plot is not None and not np.isnan(crit_val_z_upper_plot):
                 x_fill_upper = np.linspace(crit_val_z_upper_plot, plot_max_z, 100)
                 ax_z.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.3, label=f'Crit. Region α/2')
@@ -377,20 +377,20 @@ def tab_z_distribution():
                 x_fill_lower = np.linspace(plot_min_z, crit_val_z_lower_plot, 100)
                 ax_z.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.3)
                 ax_z.axvline(crit_val_z_lower_plot, color='red', linestyle='--', lw=1)
-        elif tail_z == "One-tailed (right)":
-            crit_val_z_upper_plot = stats.norm.ppf(1 - alpha_z_input)
+        elif tail_z_hyp == "One-tailed (right)":
+            crit_val_z_upper_plot = stats.norm.ppf(1 - alpha_z_hyp)
             if crit_val_z_upper_plot is not None and not np.isnan(crit_val_z_upper_plot):
                 x_fill_upper = np.linspace(crit_val_z_upper_plot, plot_max_z, 100)
                 ax_z.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.3, label=f'Crit. Region α')
                 ax_z.axvline(crit_val_z_upper_plot, color='red', linestyle='--', lw=1)
         else: 
-            crit_val_z_lower_plot = stats.norm.ppf(alpha_z_input)
+            crit_val_z_lower_plot = stats.norm.ppf(alpha_z_hyp)
             if crit_val_z_lower_plot is not None and not np.isnan(crit_val_z_lower_plot):
                 x_fill_lower = np.linspace(plot_min_z, crit_val_z_lower_plot, 100)
                 ax_z.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.3, label=f'Crit. Region α')
                 ax_z.axvline(crit_val_z_lower_plot, color='red', linestyle='--', lw=1)
 
-        ax_z.axvline(test_stat_z, color='green', linestyle='-', lw=2, label=f'Your z-stat = {test_stat_z:.3f}')
+        ax_z.axvline(test_stat_z_hyp, color='green', linestyle='-', lw=2, label=f'Your z-stat = {test_stat_z_hyp:.3f}')
         ax_z.set_title('Standard Normal Distribution')
         ax_z.set_xlabel('z-value')
         ax_z.set_ylabel('Probability Density')
@@ -398,95 +398,88 @@ def tab_z_distribution():
         ax_z.grid(True, linestyle=':', alpha=0.7)
         st.pyplot(fig_z)
 
-        st.subheader("Standard Normal Table: P(Z < z)")
-        st.markdown("This table shows the cumulative probability up to the specified z-score.")
+        st.subheader("Standard Normal Table: Cumulative P(Z < z)")
+        st.markdown("This table shows the area to the left of a given z-score.")
         
-        z_row_values = np.arange(-3.4, 3.5, 0.1)
-        z_col_values = np.arange(0.00, 0.10, 0.01)
+        z_row_vals = np.round(np.arange(-3.4, 3.5, 0.1), 1)
+        z_col_vals = np.round(np.arange(0.00, 0.10, 0.01), 2)
 
-        table_data_z_lookup = []
-        for z_r in z_row_values:
-            row = {f"z = {z_r:.1f}": ""} # Placeholder for the row label column
-            for z_c in z_col_values:
-                z_val_current = round(z_r + z_c, 2)
-                prob = stats.norm.cdf(z_val_current)
-                row[f"{z_c:.2f}"] = format_value_for_display(prob, decimals=4) # Probabilities often shown to 4dp
-            table_data_z_lookup.append(row)
+        table_data = []
+        for z_r in z_row_vals:
+            row = { 'z': f"{z_r:.1f}" } # Row header
+            for z_c in z_col_vals:
+                current_z = round(z_r + z_c, 2)
+                prob = stats.norm.cdf(current_z)
+                row[f"{z_c:.2f}"] = format_value_for_display(prob, decimals=4)
+            table_data.append(row)
         
-        df_z_lookup_table = pd.DataFrame(table_data_z_lookup)
-        # Set the first column (z-score base) as index
-        df_z_lookup_table = df_z_lookup_table.set_index(df_z_lookup_table.columns[0])
+        df_z_table = pd.DataFrame(table_data).set_index('z')
 
-
-        def style_z_lookup_table(df_to_style):
+        def style_z_table(df_to_style):
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-            # Highlight cell closest to z_lookup_val
-            z_lookup_row_base = round(float(int(z_lookup_val * 10) / 10.0), 1) # e.g., 1.23 -> 1.2
-            z_lookup_col_val = round(z_lookup_val - z_lookup_row_base, 2)       # e.g., 1.23 -> 0.03
             
-            # Find closest row index
-            closest_row_label = min(df_to_style.index, key=lambda x_label: abs(float(x_label.split("=")[1].strip()) - z_lookup_row_base))
-            
-            # Find closest col header
-            closest_col_header = min(df_to_style.columns, key=lambda c_label: abs(float(c_label) - z_lookup_col_val))
+            # Find closest row (z integer and first decimal)
+            z_lookup_base = float(f"{z_lookup_val:.1f}") # e.g., 1.23 -> 1.2
+            closest_row_label = min(df_to_style.index, key=lambda x_label: abs(float(x_label) - z_lookup_base))
 
-            if closest_row_label in df_to_style.index and closest_col_header in df_to_style.columns:
-                style.loc[closest_row_label, closest_col_header] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+            # Find closest column (second decimal)
+            z_lookup_second_decimal = round(z_lookup_val - float(closest_row_label), 2)
+            closest_col_label = min(df_to_style.columns, key=lambda c_label: abs(float(c_label) - z_lookup_second_decimal))
+
+            if closest_row_label in df_to_style.index and closest_col_label in df_to_style.columns:
+                style.loc[closest_row_label, closest_col_label] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
             return style
-
-        st.markdown(df_z_lookup_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
-                                                              {'selector': 'td', 'props': [('text-align', 'center')]}])
-                                     .apply(style_z_lookup_table, axis=None).to_html(), unsafe_allow_html=True)
+        
+        st.markdown(df_z_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
+                                                       {'selector': 'td', 'props': [('text-align', 'center')]}])
+                                     .apply(style_z_table, axis=None).to_html(), unsafe_allow_html=True)
         st.caption(f"Table shows P(Z < z). Highlighted cell is closest to your entered z-lookup value of {z_lookup_val:.2f}.")
 
 
     with col2: # Summary for Z-distribution hypothesis test
         st.subheader("Hypothesis Test Summary")
         st.markdown(f"""
-        Based on your inputs for hypothesis testing (α = {alpha_z_input:.4f}, {tail_z}):
+        Based on your inputs for hypothesis testing (α = {alpha_z_hyp:.4f}, {tail_z_hyp}):
         """)
-        p_val_z_one_right_summary = stats.norm.sf(test_stat_z)
-        p_val_z_one_left_summary = stats.norm.cdf(test_stat_z)
-        p_val_z_two_summary = 2 * stats.norm.sf(abs(test_stat_z))
+        p_val_z_one_right_summary = stats.norm.sf(test_stat_z_hyp)
+        p_val_z_one_left_summary = stats.norm.cdf(test_stat_z_hyp)
+        p_val_z_two_summary = 2 * stats.norm.sf(abs(test_stat_z_hyp))
         p_val_z_two_summary = min(p_val_z_two_summary, 1.0)
 
         crit_val_display_z = "N/A"
-        p_val_for_crit_val_display_z = alpha_z_input
+        p_val_for_crit_val_display_z = alpha_z_hyp
 
-        if tail_z == "Two-tailed":
+        if tail_z_hyp == "Two-tailed":
             crit_val_display_z = f"±{format_value_for_display(crit_val_z_upper_plot)}" if crit_val_z_upper_plot is not None else "N/A"
             p_val_calc_z_summary = p_val_z_two_summary
-            decision_crit_z_summary = abs(test_stat_z) > crit_val_z_upper_plot if crit_val_z_upper_plot is not None and not np.isnan(crit_val_z_upper_plot) else False
-            comparison_crit_str_z = f"|{test_stat_z:.3f}| ({abs(test_stat_z):.3f}) > {format_value_for_display(crit_val_z_upper_plot)}" if decision_crit_z_summary else f"|{test_stat_z:.3f}| ({abs(test_stat_z):.3f}) ≤ {format_value_for_display(crit_val_z_upper_plot)}"
-        elif tail_z == "One-tailed (right)":
+            decision_crit_z_summary = abs(test_stat_z_hyp) > crit_val_z_upper_plot if crit_val_z_upper_plot is not None and not np.isnan(crit_val_z_upper_plot) else False
+            comparison_crit_str_z = f"|{test_stat_z_hyp:.3f}| ({abs(test_stat_z_hyp):.3f}) > {format_value_for_display(crit_val_z_upper_plot)}" if decision_crit_z_summary else f"|{test_stat_z_hyp:.3f}| ({abs(test_stat_z_hyp):.3f}) ≤ {format_value_for_display(crit_val_z_upper_plot)}"
+        elif tail_z_hyp == "One-tailed (right)":
             crit_val_display_z = format_value_for_display(crit_val_z_upper_plot) if crit_val_z_upper_plot is not None else "N/A"
             p_val_calc_z_summary = p_val_z_one_right_summary
-            decision_crit_z_summary = test_stat_z > crit_val_z_upper_plot if crit_val_z_upper_plot is not None and not np.isnan(crit_val_z_upper_plot) else False
-            comparison_crit_str_z = f"{test_stat_z:.3f} > {format_value_for_display(crit_val_z_upper_plot)}" if decision_crit_z_summary else f"{test_stat_z:.3f} ≤ {format_value_for_display(crit_val_z_upper_plot)}"
+            decision_crit_z_summary = test_stat_z_hyp > crit_val_z_upper_plot if crit_val_z_upper_plot is not None and not np.isnan(crit_val_z_upper_plot) else False
+            comparison_crit_str_z = f"{test_stat_z_hyp:.3f} > {format_value_for_display(crit_val_z_upper_plot)}" if decision_crit_z_summary else f"{test_stat_z_hyp:.3f} ≤ {format_value_for_display(crit_val_z_upper_plot)}"
         else: # One-tailed (left)
             crit_val_display_z = format_value_for_display(crit_val_z_lower_plot) if crit_val_z_lower_plot is not None else "N/A"
             p_val_calc_z_summary = p_val_z_one_left_summary
-            decision_crit_z_summary = test_stat_z < crit_val_z_lower_plot if crit_val_z_lower_plot is not None and not np.isnan(crit_val_z_lower_plot) else False
-            comparison_crit_str_z = f"{test_stat_z:.3f} < {format_value_for_display(crit_val_z_lower_plot)}" if decision_crit_z_summary else f"{test_stat_z:.3f} ≥ {format_value_for_display(crit_val_z_lower_plot)}"
+            decision_crit_z_summary = test_stat_z_hyp < crit_val_z_lower_plot if crit_val_z_lower_plot is not None and not np.isnan(crit_val_z_lower_plot) else False
+            comparison_crit_str_z = f"{test_stat_z_hyp:.3f} < {format_value_for_display(crit_val_z_lower_plot)}" if decision_crit_z_summary else f"{test_stat_z_hyp:.3f} ≥ {format_value_for_display(crit_val_z_lower_plot)}"
 
-        decision_p_alpha_z_summary = p_val_calc_z_summary < alpha_z_input
+        decision_p_alpha_z_summary = p_val_calc_z_summary < alpha_z_hyp
         
         st.markdown(f"""
-        1.  **Critical Value ({tail_z})**: {crit_val_display_z}
+        1.  **Critical Value ({tail_z_hyp})**: {crit_val_display_z}
             * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_display_z:.4f}
-        2.  **Your Calculated Test Statistic**: {test_stat_z:.3f}
+        2.  **Your Calculated Test Statistic**: {test_stat_z_hyp:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_z_summary, decimals=4)} ({apa_p_value(p_val_calc_z_summary)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_z_summary else 'not rejected'}**.
             * *Reason*: z(calc) {comparison_crit_str_z} relative to z(crit).
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_z_summary else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_z_summary)} is {'less than' if decision_p_alpha_z_summary else 'not less than'} α ({alpha_z_input:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_z_summary)} is {'less than' if decision_p_alpha_z_summary else 'not less than'} α ({alpha_z_hyp:.4f}).
         5.  **APA 7 Style Report**:
-            *z* = {test_stat_z:.2f}, {apa_p_value(p_val_calc_z_summary)}. The null hypothesis was {'rejected' if decision_p_alpha_z_summary else 'not rejected'} at α = {alpha_z_input:.2f}.
+            *z* = {test_stat_z_hyp:.2f}, {apa_p_value(p_val_calc_z_summary)}. The null hypothesis was {'rejected' if decision_p_alpha_z_summary else 'not rejected'} at α = {alpha_z_hyp:.2f}.
         """)
 
-
-# --- Remaining Tabs (F, Chi2, MW, Wilcoxon, Binomial, Tukey, KW, Friedman) ---
-# These will be fully implemented below.
 
 # --- Tab 3: F-distribution (Fully Implemented) ---
 # (Code from previous correct version, ensuring robustness)
@@ -704,10 +697,10 @@ def tab_chi_square_distribution():
         table_alpha_cols_chi2 = [0.10, 0.05, 0.025, 0.01, 0.005] 
         
         chi2_table_rows = []
-        for df_iter_display in df_chi2_options: # Use same df options as selectbox
-            row_data = {'df': str(df_iter_display)}
+        for df_iter in df_chi2_options: # Use same df options as selectbox
+            row_data = {'df': str(df_iter)}
             for alpha_col in table_alpha_cols_chi2:
-                cv = stats.chi2.ppf(1 - alpha_col, df_iter_display)
+                cv = stats.chi2.ppf(1 - alpha_col, df_iter)
                 row_data[f"α = {alpha_col:.3f}"] = format_value_for_display(cv)
             chi2_table_rows.append(row_data)
         
@@ -721,11 +714,8 @@ def tab_chi_square_distribution():
                 style.loc[selected_df_str, :] = 'background-color: lightblue;'
             
             target_alpha_for_col_highlight = alpha_chi2_input
-            # For chi-square, table usually shows upper tail. Two-tailed test needs care.
-            # If two-tailed, we care about alpha_input/2 for upper, and 1-alpha_input/2 for lower.
-            # The table only shows upper, so we highlight based on alpha_input or alpha_input/2.
             if tail_chi2 == "Two-tailed (e.g. for variance)":
-                 target_alpha_for_col_highlight = alpha_chi2_input / 2.0 # for upper critical value
+                 target_alpha_for_col_highlight = alpha_chi2_input / 2.0 
 
             closest_alpha_col_val = min(table_alpha_cols_chi2, key=lambda x: abs(x - target_alpha_for_col_highlight))
             highlight_col_name = f"α = {closest_alpha_col_val:.3f}"
@@ -749,7 +739,7 @@ def tab_chi_square_distribution():
         * For **One-tailed (right) tests** (e.g., goodness-of-fit, independence), use the α column matching your chosen significance level.
         * For **Two-tailed tests on variance**, if your total significance level is α<sub>total</sub>:
             * Upper critical value: Look up column for α = α<sub>total</sub>/2.
-            * Lower critical value: Look up column for α = 1 - α<sub>total</sub>/2 (this table doesn't directly show these, use `stats.chi2.ppf(alpha_total/2, df)` for lower).
+            * Lower critical value: Use `stats.chi2.ppf(α_total/2, df)` (not directly in this table's main columns).
         """)
 
 
@@ -896,7 +886,6 @@ def tab_kruskal_wallis():
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
             selected_df_str = str(df_kw) # User's calculated df
 
-            # Find closest df in table for row highlighting
             closest_df_row_val = min(table_df_options_chi2, key=lambda x: abs(x - df_kw)) if df_kw > 0 else None
             closest_df_row_str = str(closest_df_row_val) if closest_df_row_val is not None else None
 
