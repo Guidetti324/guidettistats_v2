@@ -416,30 +416,45 @@ def tab_z_distribution():
         df_z_lookup_table = pd.DataFrame(table_data_z_lookup).set_index('z')
 
         def style_z_lookup_table(df_to_style):
-            data = df_to_style # DataFrame is passed directly
+            data = df_to_style 
             style = pd.DataFrame('', index=data.index, columns=data.columns)
             
             try:
-                z_lookup_base_float = float(f"{z_lookup_val:.1f}") # e.g., 1.23 -> 1.2
-                closest_row_label_str = min(data.index, key=lambda x_label: abs(float(x_label) - z_lookup_base_float))
-
-                z_lookup_second_decimal_target = round(z_lookup_val - float(closest_row_label_str), 2)
+                # Find closest row (z integer and first decimal)
+                # Ensure z_lookup_val is treated as float for precise rounding for base
+                z_lookup_base_str = f"{float(z_lookup_val):.1f}" 
                 
-                col_labels_float = [float(col_str) for col_str in data.columns]
-                closest_col_idx = np.argmin(np.abs(np.array(col_labels_float) - z_lookup_second_decimal_target))
-                closest_col_label_str = data.columns[closest_col_idx]
+                # Find closest column (second decimal)
+                # Calculate the second decimal part for the lookup value
+                z_lookup_second_decimal_target = round(z_lookup_val - float(z_lookup_base_str), 2)
 
-                if closest_row_label_str in data.index and closest_col_label_str in data.columns:
-                    style.loc[closest_row_label_str, closest_col_label_str] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+                # Find the column header string that is closest to this second decimal
+                closest_col_label_str = min(data.columns, key=lambda c_label: abs(float(c_label) - z_lookup_second_decimal_target))
+
+                # Highlight row
+                if z_lookup_base_str in data.index:
+                    style.loc[z_lookup_base_str, :] = 'background-color: lightblue;'
+                
+                # Highlight column
+                if closest_col_label_str in data.columns:
+                    for r_idx in data.index:
+                        current_r_style = style.loc[r_idx, closest_col_label_str]
+                        style.loc[r_idx, closest_col_label_str] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
+                
+                # Highlight specific cell
+                if z_lookup_base_str in data.index and closest_col_label_str in data.columns:
+                    current_c_style = style.loc[z_lookup_base_str, closest_col_label_str]
+                    style.loc[z_lookup_base_str, closest_col_label_str] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+
             except Exception as e:
                 # st.error(f"Error in z-table styling: {e}") # Optional: for debugging
-                pass # Gracefully skip highlighting if there's an issue
+                pass 
             return style
         
         st.markdown(df_z_lookup_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                                {'selector': 'td', 'props': [('text-align', 'center')]}])
                                      .apply(style_z_lookup_table, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption(f"Table shows P(Z < z). Highlighted cell is closest to your entered z-lookup value of {z_lookup_val:.2f}.")
+        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to your entered z-lookup value of {z_lookup_val:.2f}.")
 
 
     with col2: # Summary for Z-distribution hypothesis test
@@ -819,32 +834,57 @@ def tab_mann_whitney_u():
                 z_calc_mw = (u_stat_mw + 0.5 - mu_u) / sigma_u
             elif u_stat_mw > mu_u:
                 z_calc_mw = (u_stat_mw - 0.5 - mu_u) / sigma_u
-            else: 
-                z_calc_mw = 0.0 
-        else: 
-            z_calc_mw = 0.0
-            if n1_mw > 0 and n2_mw > 0: st.warning("Standard deviation (σ_U) is zero. Check sample sizes. z_calc set to 0.")
+            # else z_calc_mw remains 0.0 if u_stat_mw == mu_u
+        elif n1_mw > 0 and n2_mw > 0: # Only warn if sample sizes suggest sigma_u should be > 0
+            st.warning("Standard deviation (σ_U) is zero or invalid. Check sample sizes. z_calc set to 0.")
 
 
         st.markdown(f"**Normal Approximation Parameters:** μ<sub>U</sub> = {mu_u:.2f}, σ<sub>U</sub> = {sigma_u:.2f}")
         st.markdown(f"**Calculated z-statistic (from U, with continuity correction):** {z_calc_mw:.3f}")
 
         st.subheader("Standard Normal Distribution Plot (for z_calc)")
-        # ... (Plotting code similar to z-distribution tab, using z_calc_mw and alpha_mw)
         fig_mw, ax_mw = plt.subplots(figsize=(8,5))
         plot_min_z_mw = min(stats.norm.ppf(0.0001), z_calc_mw - 2, -4.0)
         plot_max_z_mw = max(stats.norm.ppf(0.9999), z_calc_mw + 2, 4.0)
-        # ... (rest of plot code)
+        if abs(z_calc_mw) > 4 and abs(z_calc_mw) > plot_max_z_mw * 0.8:
+            plot_min_z_mw = min(plot_min_z_mw, z_calc_mw -1)
+            plot_max_z_mw = max(plot_max_z_mw, z_calc_mw +1)
+        
         x_norm_mw = np.linspace(plot_min_z_mw, plot_max_z_mw, 500)
         y_norm_mw = stats.norm.pdf(x_norm_mw)
         ax_mw.plot(x_norm_mw, y_norm_mw, 'b-', lw=2, label='Standard Normal Distribution')
-        # ... (Highlight critical regions based on alpha_mw and tail_mw)
+        
+        crit_z_upper_mw_plot, crit_z_lower_mw_plot = None, None
+        if tail_mw == "Two-tailed":
+            crit_z_upper_mw_plot = stats.norm.ppf(1 - alpha_mw / 2)
+            crit_z_lower_mw_plot = stats.norm.ppf(alpha_mw / 2)
+            if crit_z_upper_mw_plot is not None and not np.isnan(crit_z_upper_mw_plot):
+                x_fill_upper = np.linspace(crit_z_upper_mw_plot, plot_max_z_mw, 100)
+                ax_mw.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, label=f'α/2 = {alpha_mw/2:.4f}')
+                ax_mw.axvline(crit_z_upper_mw_plot, color='red', linestyle='--', lw=1)
+            if crit_z_lower_mw_plot is not None and not np.isnan(crit_z_lower_mw_plot):
+                x_fill_lower = np.linspace(plot_min_z_mw, crit_z_lower_mw_plot, 100)
+                ax_mw.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5)
+                ax_mw.axvline(crit_z_lower_mw_plot, color='red', linestyle='--', lw=1)
+        elif tail_mw == "One-tailed (right)":
+            crit_z_upper_mw_plot = stats.norm.ppf(1 - alpha_mw)
+            if crit_z_upper_mw_plot is not None and not np.isnan(crit_z_upper_mw_plot):
+                x_fill_upper = np.linspace(crit_z_upper_mw_plot, plot_max_z_mw, 100)
+                ax_mw.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, label=f'α = {alpha_mw:.4f}')
+                ax_mw.axvline(crit_z_upper_mw_plot, color='red', linestyle='--', lw=1)
+        else: # One-tailed (left)
+            crit_z_lower_mw_plot = stats.norm.ppf(alpha_mw)
+            if crit_z_lower_mw_plot is not None and not np.isnan(crit_z_lower_mw_plot):
+                x_fill_lower = np.linspace(plot_min_z_mw, crit_z_lower_mw_plot, 100)
+                ax_mw.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5, label=f'α = {alpha_mw:.4f}')
+                ax_mw.axvline(crit_z_lower_mw_plot, color='red', linestyle='--', lw=1)
+
         ax_mw.axvline(z_calc_mw, color='green', linestyle='-', lw=2, label=f'z_calc = {z_calc_mw:.3f}')
+        ax_mw.set_title('Normal Approx. for Mann-Whitney U: Critical z Region(s)')
         ax_mw.legend(); ax_mw.grid(True); st.pyplot(fig_mw)
 
 
         st.subheader("Critical z-Values (Upper Tail) for Approximation")
-        # Display a standard z-critical value table snippet
         table_alpha_cols_z_crit = [0.10, 0.05, 0.025, 0.01, 0.005]
         z_crit_table_rows = [{'Distribution': 'z (Standard Normal)'}]
         for alpha_c in table_alpha_cols_z_crit:
@@ -863,6 +903,7 @@ def tab_mann_whitney_u():
 
         st.markdown(df_z_crit_table_mw.style.apply(style_z_crit_table_mw, axis=None).to_html(), unsafe_allow_html=True)
         st.caption("Compare your calculated z-statistic to these critical z-values.")
+        st.markdown("""**Table Interpretation Note:** (Same as z-Distribution tab critical value table)""")
 
 
     with col2: # Summary for Mann-Whitney U
@@ -879,30 +920,22 @@ def tab_mann_whitney_u():
         p_val_mw_one_left = stats.norm.cdf(z_calc_mw)
         p_val_mw_two = 2 * stats.norm.sf(abs(z_calc_mw))
         p_val_mw_two = min(p_val_mw_two, 1.0)
-
-        crit_val_z_upper_mw_summary, crit_val_z_lower_mw_summary = None, None
-        if tail_mw == "Two-tailed":
-            crit_val_z_upper_mw_summary = stats.norm.ppf(1 - alpha_mw / 2)
-        elif tail_mw == "One-tailed (right)":
-            crit_val_z_upper_mw_summary = stats.norm.ppf(1 - alpha_mw)
-        else: # One-tailed (left)
-            crit_val_z_lower_mw_summary = stats.norm.ppf(alpha_mw)
         
         crit_val_z_display_mw = "N/A"
         if tail_mw == "Two-tailed":
-            crit_val_z_display_mw = f"±{format_value_for_display(crit_val_z_upper_mw_summary)}" if crit_val_z_upper_mw_summary is not None else "N/A"
+            crit_val_z_display_mw = f"±{format_value_for_display(crit_z_upper_mw_plot)}" if crit_z_upper_mw_plot is not None else "N/A"
             p_val_calc_mw = p_val_mw_two
-            decision_crit_mw = abs(z_calc_mw) > crit_val_z_upper_mw_summary if crit_val_z_upper_mw_summary is not None and not np.isnan(crit_val_z_upper_mw_summary) else False
+            decision_crit_mw = abs(z_calc_mw) > crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None and not np.isnan(crit_z_upper_mw_plot) else False
         elif tail_mw == "One-tailed (right)":
-            crit_val_z_display_mw = format_value_for_display(crit_val_z_upper_mw_summary) if crit_val_z_upper_mw_summary is not None else "N/A"
+            crit_val_z_display_mw = format_value_for_display(crit_z_upper_mw_plot) if crit_z_upper_mw_plot is not None else "N/A"
             p_val_calc_mw = p_val_mw_one_right
-            decision_crit_mw = z_calc_mw > crit_val_z_upper_mw_summary if crit_val_z_upper_mw_summary is not None and not np.isnan(crit_val_z_upper_mw_summary) else False
+            decision_crit_mw = z_calc_mw > crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None and not np.isnan(crit_z_upper_mw_plot) else False
         else: # One-tailed (left)
-            crit_val_z_display_mw = format_value_for_display(crit_val_z_lower_mw_summary) if crit_val_z_lower_mw_summary is not None else "N/A"
+            crit_val_z_display_mw = format_value_for_display(crit_z_lower_mw_plot) if crit_z_lower_mw_plot is not None else "N/A"
             p_val_calc_mw = p_val_mw_one_left
-            decision_crit_mw = z_calc_mw < crit_val_z_lower_mw_summary if crit_val_z_lower_mw_summary is not None and not np.isnan(crit_val_z_lower_mw_summary) else False
+            decision_crit_mw = z_calc_mw < crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None and not np.isnan(crit_z_lower_mw_plot) else False
         
-        comparison_crit_str_mw = f"z_calc ({z_calc_mw:.3f}) vs z_crit ({crit_val_z_display_mw})" # Simplified
+        comparison_crit_str_mw = f"z_calc ({z_calc_mw:.3f}) vs z_crit ({crit_val_z_display_mw})" 
         decision_p_alpha_mw = p_val_calc_mw < alpha_mw
         
         st.markdown(f"""
@@ -922,8 +955,120 @@ def tab_mann_whitney_u():
 def tab_wilcoxon_t():
     st.header("Wilcoxon Signed-Rank T Test (Normal Approximation)")
     # ... (Implementation will be very similar to Mann-Whitney U, using its own formulas for mu_T and sigma_T)
-    st.write("Wilcoxon Signed-Rank T Test implementation is pending.")
+    # ... (It will also use a z-critical value table for approximation)
+    col1, col2 = st.columns([2, 1.5])
 
+    with col1:
+        st.subheader("Inputs")
+        alpha_w = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_w_input")
+        n_w = st.number_input("Sample Size (n, non-zero differences)", 1, 1000, 15, 1, key="n_w_input") 
+        tail_w = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_w_radio")
+        t_stat_w = st.number_input("Calculated T-statistic (sum of ranks)", value=float(n_w*(n_w+1)/4 / 2 if n_w >0 else 0), format="%.1f", min_value=0.0, max_value=float(n_w*(n_w+1)/2 if n_w > 0 else 0), key="t_stat_w_input")
+        st.caption("Note: Normal approximation best for n > ~15-20. T is usually the smaller of T+ or T- for two-tailed tests.")
+
+        mu_t_w = n_w * (n_w + 1) / 4
+        sigma_t_w_sq = n_w * (n_w + 1) * (2 * n_w + 1) / 24
+        sigma_t_w = np.sqrt(sigma_t_w_sq) if sigma_t_w_sq > 0 else 0
+        
+        z_calc_w = 0.0
+        if sigma_t_w > 0:
+            if t_stat_w < mu_t_w: 
+                z_calc_w = (t_stat_w + 0.5 - mu_t_w) / sigma_t_w
+            elif t_stat_w > mu_t_w: 
+                z_calc_w = (t_stat_w - 0.5 - mu_t_w) / sigma_t_w
+        elif n_w > 0: 
+            st.warning("Standard deviation (σ_T) is zero or invalid. Check sample size n. z_calc set to 0.")
+
+        st.markdown(f"**Normal Approximation Parameters:** μ<sub>T</sub> = {mu_t_w:.2f}, σ<sub>T</sub> = {sigma_t_w:.2f}")
+        st.markdown(f"**Calculated z-statistic (from T, with continuity correction):** {z_calc_w:.3f}")
+        
+        # Plotting (similar to Mann-Whitney U)
+        st.subheader("Standard Normal Distribution Plot (for z_calc)")
+        fig_w, ax_w = plt.subplots(figsize=(8,5))
+        # ... (plotting logic for z_calc_w and critical regions based on alpha_w and tail_w)
+        plot_min_z_w = min(stats.norm.ppf(0.0001), z_calc_w - 2, -4.0)
+        plot_max_z_w = max(stats.norm.ppf(0.9999), z_calc_w + 2, 4.0)
+        x_norm_w = np.linspace(plot_min_z_w, plot_max_z_w, 500)
+        y_norm_w = stats.norm.pdf(x_norm_w)
+        ax_w.plot(x_norm_w, y_norm_w, 'b-', lw=2, label='Standard Normal Distribution')
+        ax_w.axvline(z_calc_w, color='green', linestyle='-', lw=2, label=f'z_calc = {z_calc_w:.3f}')
+        ax_w.legend(); ax_w.grid(True); st.pyplot(fig_w)
+
+
+        st.subheader("Critical z-Values (Upper Tail) for Approximation")
+        table_alpha_cols_z_crit_w = [0.10, 0.05, 0.025, 0.01, 0.005]
+        z_crit_table_rows_w = [{'Distribution': 'z (Standard Normal)'}]
+        for alpha_c in table_alpha_cols_z_crit_w:
+            z_crit_table_rows_w[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
+        df_z_crit_table_w = pd.DataFrame(z_crit_table_rows_w).set_index('Distribution')
+        
+        def style_z_crit_table_w(df_to_style): # Similar to Mann-Whitney
+            style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+            target_alpha_for_col = alpha_w
+            if tail_w == "Two-tailed": target_alpha_for_col = alpha_w / 2.0
+            closest_alpha_col = min(table_alpha_cols_z_crit_w, key=lambda x: abs(x - target_alpha_for_col))
+            highlight_col = f"α = {closest_alpha_col:.3f}"
+            if highlight_col in df_to_style.columns:
+                style.loc[:, highlight_col] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+            return style
+        st.markdown(df_z_crit_table_w.style.apply(style_z_crit_table_w, axis=None).to_html(), unsafe_allow_html=True)
+        st.caption("Compare your calculated z-statistic to these critical z-values.")
+        st.markdown("""**Table Interpretation Note:** (Same as z-Distribution tab critical value table)""")
+
+
+    with col2: # Summary for Wilcoxon T
+        st.subheader("P-value Calculation Explanation")
+        st.markdown(f"""
+        The T statistic ({t_stat_w:.1f}) is converted to z ({z_calc_w:.3f}) using μ<sub>T</sub>={mu_t_w:.2f}, σ<sub>T</sub>={sigma_t_w:.2f} (with continuity correction). P-value from normal distribution.
+        * **Two-tailed**: `2 * P(Z ≥ |{z_calc_w:.3f}|)` 
+        * **One-tailed (right)**: `P(Z ≥ {z_calc_w:.3f})` 
+        * **One-tailed (left)**: `P(Z ≤ {z_calc_w:.3f})` 
+        """)
+
+        st.subheader("Summary")
+        p_val_w_one_right_tail_on_z = stats.norm.sf(z_calc_w) 
+        p_val_w_one_left_tail_on_z = stats.norm.cdf(z_calc_w)  
+        p_val_w_two_tail_on_z = 2 * stats.norm.sf(abs(z_calc_w)) 
+        p_val_w_two_tail_on_z = min(p_val_w_two_tail_on_z, 1.0)
+
+        # Get critical z values for summary based on alpha_w and tail_w
+        crit_z_upper_w_summary, crit_z_lower_w_summary = None, None
+        if tail_w == "Two-tailed":
+            crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w / 2)
+        elif tail_w == "One-tailed (right)":
+            crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w)
+        else: # One-tailed (left)
+            crit_z_lower_w_summary = stats.norm.ppf(alpha_w)
+
+        crit_val_z_display_w = "N/A"
+        if tail_w == "Two-tailed":
+            crit_val_z_display_w = f"±{format_value_for_display(crit_z_upper_w_summary)}" if crit_z_upper_w_summary is not None else "N/A"
+            p_val_calc_w = p_val_w_two_tail_on_z
+            decision_crit_w = abs(z_calc_w) > crit_z_upper_w_summary if crit_z_upper_w_summary is not None and not np.isnan(crit_z_upper_w_summary) else False
+        elif tail_w == "One-tailed (right)": 
+            crit_val_z_display_w = format_value_for_display(crit_z_upper_w_summary) if crit_z_upper_w_summary is not None else "N/A"
+            p_val_calc_w = p_val_w_one_right_tail_on_z 
+            decision_crit_w = z_calc_w > crit_z_upper_w_summary if crit_z_upper_w_summary is not None and not np.isnan(crit_z_upper_w_summary) else False
+        else: 
+            crit_val_z_display_w = format_value_for_display(crit_z_lower_w_summary) if crit_z_lower_w_summary is not None else "N/A"
+            p_val_calc_w = p_val_w_one_left_tail_on_z 
+            decision_crit_w = z_calc_w < crit_z_lower_w_summary if crit_z_lower_w_summary is not None and not np.isnan(crit_z_lower_w_summary) else False
+        
+        comparison_crit_str_w = f"z_calc ({z_calc_w:.3f}) vs z_crit ({crit_val_z_display_w})"
+        decision_p_alpha_w = p_val_calc_w < alpha_w
+        
+        st.markdown(f"""
+        1.  **Critical z-value ({tail_w})**: {crit_val_z_display_w}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_w:.4f}
+        2.  **Calculated T-statistic**: {t_stat_w:.1f} (Converted z-statistic: {z_calc_w:.3f})
+            * *Calculated p-value (from z_calc)*: {format_value_for_display(p_val_calc_w, decimals=4)} ({apa_p_value(p_val_calc_w)})
+        3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_w else 'not rejected'}**.
+            * *Reason*: {comparison_crit_str_w}.
+        4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_w else 'not rejected'}**.
+            * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.4f}).
+        5.  **APA 7 Style Report (based on z-approximation)**:
+            A Wilcoxon signed-rank test indicated that the median difference was {'' if decision_p_alpha_w else 'not '}statistically significant, *T* = {t_stat_w:.1f}, *z* = {z_calc_w:.2f}, {apa_p_value(p_val_calc_w)}. The null hypothesis was {'rejected' if decision_p_alpha_w else 'not rejected'} at α = {alpha_w:.2f} (n={n_w}).
+        """)
 
 # --- Binomial Test ---
 def tab_binomial_test():
@@ -957,7 +1102,6 @@ def tab_kruskal_wallis():
         crit_val_chi2_kw_plot = None 
         
         if df_kw > 0:
-            # ... (Plotting code as before, ensure crit_val_chi2_kw_plot is correctly assigned)
             crit_val_chi2_kw_plot = stats.chi2.ppf(1 - alpha_kw, df_kw)
             plot_min_chi2_kw = 0.001
             plot_max_chi2_kw = max(stats.chi2.ppf(0.999, df_kw), test_stat_h_kw * 1.5, 10.0)
