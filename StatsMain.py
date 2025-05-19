@@ -422,14 +422,12 @@ def tab_z_distribution():
             try:
                 z_target = test_stat_z_hyp 
                 
-                # Determine closest row label string
-                z_target_base_numeric = np.trunc(z_target * 10) / 10.0 # e.g., 1.23 -> 1.2; -1.28 -> -1.2
+                z_target_base_numeric = np.trunc(z_target * 10) / 10.0 
                 
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
-                # Determine closest column label string
                 z_target_second_decimal = round(abs(z_target - closest_row_float_val), 2) 
                 
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
@@ -438,7 +436,7 @@ def tab_z_distribution():
 
 
                 if highlight_row_label in style_df.index:
-                    for col_name_iter in style_df.columns: # Iterate through columns to apply to each cell in the row
+                    for col_name_iter in style_df.columns: 
                         style_df.loc[highlight_row_label, col_name_iter] = 'background-color: lightblue;'
                 
                 if highlight_col_label in style_df.columns:
@@ -448,7 +446,7 @@ def tab_z_distribution():
                 
                 if highlight_row_label in style_df.index and highlight_col_label in style_df.columns:
                     current_cell_style = style_df.loc[highlight_row_label, highlight_col_label]
-                    style_df.loc[highlight_row_label, highlight_col_label] = (current_cell_style + ';' if current_cell_style and not current_cell_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;' # Cell gets yellow
+                    style_df.loc[highlight_row_label, highlight_col_label] = (current_cell_style + ';' if current_cell_style and not current_cell_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
             
             except Exception: 
                 pass 
