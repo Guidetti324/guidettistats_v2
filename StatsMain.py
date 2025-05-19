@@ -140,6 +140,55 @@ def get_tukey_q_from_csv(df_error, k, alpha):
     st.error(f"Could not find a suitable value in CSV for df={df_error}, k={k_to_use}, alpha={alpha_lookup_key:.4f}.")
     return None
 
+def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
+    """
+    Creates a window of df values around the selected_df_val.
+    all_df_options: List of all possible df values (can include 'z (∞)').
+    selected_df_val: The df value selected by the user (can be 'z (∞)' or numeric).
+    window_size: Number of rows to show above and below the selected_df_val.
+    Returns a list of df values for the table rows.
+    """
+    try:
+        # Convert 'z (∞)' to a comparable large number for finding index, but keep its string form for display
+        temp_selected_df = float('inf') if selected_df_val == 'z (∞)' else float(selected_df_val)
+        
+        # Find the closest index in all_df_options
+        # Need to handle 'z (∞)' in all_df_options carefully for comparison
+        closest_idx = -1
+        min_diff = float('inf')
+
+        for i, option in enumerate(all_df_options):
+            option_val = float('inf') if option == 'z (∞)' else float(option)
+            diff = abs(option_val - temp_selected_df)
+            if diff < min_diff:
+                min_diff = diff
+                closest_idx = i
+            elif diff == min_diff and option_val == temp_selected_df: # Prefer exact match
+                closest_idx = i
+
+
+        if closest_idx == -1: # Should not happen if all_df_options is not empty
+            return [selected_df_val] if selected_df_val in all_df_options else all_df_options[:window_size*2+1]
+
+        start_idx = max(0, closest_idx - window_size)
+        end_idx = min(len(all_df_options), closest_idx + window_size + 1)
+        
+        windowed_df_options = all_df_options[start_idx:end_idx]
+        
+        # Ensure the selected_df_val is in the window if it was in the original options
+        # This is mostly for cases where selected_df_val might not be in the default range of all_df_options
+        # but for this app, df_t_selected_display comes from df_options_display.
+        if selected_df_val not in windowed_df_options and selected_df_val in all_df_options:
+            # This logic might need refinement if selected_df_val is far from the window
+            # For now, we assume it will be caught by the closest_idx logic.
+            # If not, one could insert it and re-sort or adjust window.
+            # However, given how selectbox works, selected_df_val will be in all_df_options.
+            pass
+
+        return windowed_df_options
+    except Exception: # Fallback in case of any error
+        return all_df_options[:window_size*2+1] # Default to first few options
+
 
 # --- Tab 1: t-distribution ---
 def tab_t_distribution():
@@ -150,11 +199,12 @@ def tab_t_distribution():
         st.subheader("Inputs")
         alpha_t_input = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_t_input")
         
-        df_options_display = list(range(1, 31)) + [40, 60, 80, 100, 1000, 'z (∞)']
-        df_t_selected_display = st.selectbox("Degrees of Freedom (df)", options=df_options_display, index=9, key="df_t_selectbox") 
+        # Comprehensive list of df values for t-tables
+        all_df_values_t = list(range(1, 31)) + [35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 1000, 'z (∞)']
+        df_t_selected_display = st.selectbox("Degrees of Freedom (df)", options=all_df_values_t, index=all_df_values_t.index(10), key="df_t_selectbox") 
 
         if df_t_selected_display == 'z (∞)':
-            df_t_calc = np.inf # df for calculation
+            df_t_calc = np.inf 
         else:
             df_t_calc = int(df_t_selected_display)
 
@@ -219,11 +269,12 @@ def tab_t_distribution():
         st.pyplot(fig_t)
 
         st.subheader("Critical t-Values (Upper Tail)")
-        table_df_options = list(range(1, 21)) + [25, 30, 40, 50, 60, 80, 100, 1000, 'z (∞)']
+        
+        table_df_window = get_dynamic_df_window(all_df_values_t, df_t_selected_display, window_size=5)
         table_alpha_cols = [0.10, 0.05, 0.025, 0.01, 0.005] 
 
         table_rows = []
-        for df_iter_display in table_df_options:
+        for df_iter_display in table_df_window:
             df_iter_calc = np.inf if df_iter_display == 'z (∞)' else int(df_iter_display)
             row_data = {'df': str(df_iter_display)}
             for alpha_col in table_alpha_cols:
@@ -255,9 +306,9 @@ def tab_t_distribution():
                      current_r_style = style.loc[r_idx, highlight_col_name]
                      style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
                 
-                if selected_df_str in df_to_style.index:
+                if selected_df_str in df_to_style.index: # Ensure the specific cell is highlighted on top
                     current_c_style = style.loc[selected_df_str, highlight_col_name]
-                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
 
         st.markdown(df_t_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
@@ -359,7 +410,6 @@ def tab_z_distribution():
         y_z_plot = stats.norm.pdf(x_z_plot)
         ax_z.plot(x_z_plot, y_z_plot, 'b-', lw=2, label='Standard Normal Distribution (z)')
 
-        # Highlight area for z_lookup_val (which is test_stat_z_hyp)
         x_fill_lookup = np.linspace(plot_min_z, z_lookup_val, 100)
         ax_z.fill_between(x_fill_lookup, stats.norm.pdf(x_fill_lookup), color='skyblue', alpha=0.5, label=f'P(Z < {z_lookup_val:.3f})')
         
@@ -399,14 +449,30 @@ def tab_z_distribution():
         st.subheader("Standard Normal Table: Cumulative P(Z < z)")
         st.markdown("This table shows the area to the left of a given z-score. Your calculated z-statistic is used for highlighting.")
         
-        z_row_vals_str = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
-        z_col_vals_str = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
+        all_z_row_labels = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
+        z_col_labels = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
+
+        # Determine window for z-table rows
+        z_target_for_table_row = round(test_stat_z_hyp, 1) # Target the row based on first decimal
+        
+        try:
+            # Find index of the closest row label to z_target_for_table_row
+            closest_row_idx = min(range(len(all_z_row_labels)), key=lambda i: abs(float(all_z_row_labels[i]) - z_target_for_table_row))
+        except ValueError: # Fallback if conversion fails
+            closest_row_idx = len(all_z_row_labels) // 2
+
+
+        window_size = 5
+        start_idx = max(0, closest_row_idx - window_size)
+        end_idx = min(len(all_z_row_labels), closest_row_idx + window_size + 1)
+        z_table_display_rows = all_z_row_labels[start_idx:end_idx]
+
 
         table_data_z_lookup = []
-        for z_r_str_idx in z_row_vals_str:
+        for z_r_str_idx in z_table_display_rows:
             z_r_val = float(z_r_str_idx)
             row = { 'z': z_r_str_idx } 
-            for z_c_str_idx in z_col_vals_str:
+            for z_c_str_idx in z_col_labels:
                 z_c_val = float(z_c_str_idx)
                 current_z_val = round(z_r_val + z_c_val, 2)
                 prob = stats.norm.cdf(current_z_val)
@@ -422,23 +488,15 @@ def tab_z_distribution():
             try:
                 z_target = test_stat_z_hyp 
                 
-                # Determine closest row label string
-                # Correctly round z_target to one decimal place for row lookup
-                z_target_base_numeric = round(z_target * 10) / 10.0 
-                
-                actual_row_labels_float = [float(label) for label in data.index]
+                z_target_base_numeric = round(z_target,1) 
+                actual_row_labels_float = [float(label) for label in data.index] # These are already the windowed labels
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
-                # Determine closest column label string
-                # The second decimal for the target z
-                z_target_second_decimal_part = round(z_target - closest_row_float_val, 2)
-                # Ensure it's positive and within 0.00 to 0.09 range for column lookup
-                z_target_second_decimal_for_col = round(abs(z_target_second_decimal_part),2)
-
-
+                z_target_second_decimal_part = round(abs(z_target - closest_row_float_val), 2) 
+                
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
-                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_target_second_decimal_for_col))
+                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_target_second_decimal_part))
                 highlight_col_label = f"{closest_col_float_val:.2f}"
 
 
@@ -518,11 +576,12 @@ def tab_f_distribution():
     with col1:
         st.subheader("Inputs")
         alpha_f_input = st.number_input("Alpha (α) for Table/Plot", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_f_input_tab3")
-        df1_options = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 24, 30, 40, 60, 120, 1000]
-        df2_options = list(range(1,21)) + [22,24,26,28,30,40,60,120,1000] 
+        
+        all_df1_options = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 24, 30, 40, 50, 60, 80, 100, 120, 1000]
+        all_df2_options = list(range(1,21)) + [22, 24, 26, 28, 30, 35, 40, 45, 50, 60, 80, 100, 120, 1000] 
 
-        df1_f_selected = st.selectbox("Numerator df (df₁) for Table/Plot", options=df1_options, index=df1_options.index(3), key="df1_f_selectbox_tab3") 
-        df2_f_selected = st.selectbox("Denominator df (df₂) for Table/Plot", options=df2_options, index=df2_options.index(20), key="df2_f_selectbox_tab3") 
+        df1_f_selected = st.selectbox("Numerator df (df₁) for Plot & Summary", options=all_df1_options, index=all_df1_options.index(3), key="df1_f_selectbox_tab3") 
+        df2_f_selected = st.selectbox("Denominator df (df₂) for Plot & Summary", options=all_df2_options, index=all_df2_options.index(20), key="df2_f_selectbox_tab3") 
         
         tail_f = st.radio("Tail Selection (for plot & summary)", ("One-tailed (right)", "Two-tailed (for variance test)"), key="tail_f_radio_tab3")
         test_stat_f = st.number_input("Calculated F-statistic", value=1.0, format="%.3f", min_value=0.001, key="test_stat_f_input_tab3")
@@ -531,14 +590,12 @@ def tab_f_distribution():
         fig_f, ax_f = plt.subplots(figsize=(8,5))
         
         plot_min_f = 0.001
-        plot_max_f = 5.0 # Default
+        plot_max_f = 5.0 
         try:
             plot_max_f = max(stats.f.ppf(0.999, df1_f_selected, df2_f_selected), test_stat_f * 1.5, 5.0)
             if test_stat_f > stats.f.ppf(0.999, df1_f_selected, df2_f_selected) * 1.2 : 
                 plot_max_f = test_stat_f * 1.2
-        except Exception: 
-            pass
-
+        except Exception: pass
 
         x_f_plot = np.linspace(plot_min_f, plot_max_f, 500)
         y_f_plot = stats.f.pdf(x_f_plot, df1_f_selected, df2_f_selected)
@@ -573,14 +630,16 @@ def tab_f_distribution():
         st.pyplot(fig_f)
 
         st.subheader(f"Critical F-Values for α = {alpha_f_input:.3f} (Upper Tail)")
-        table_df1_cols = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 60, 120] 
-        table_df2_rows = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 60, 120, 1000] 
+        # Define a fixed set of df1 values for columns for better table layout
+        table_df1_display_cols = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 60, 120] 
+        table_df2_window = get_dynamic_df_window(all_df2_options, df2_f_selected, window_size=5)
+
 
         f_table_data = []
-        for df2_val in table_df2_rows:
-            row = {'df₂': str(df2_val)}
-            for df1_val in table_df1_cols:
-                cv = stats.f.ppf(1 - alpha_f_input, df1_val, df2_val)
+        for df2_val in table_df2_window:
+            row = {'df₂': str(df2_val)} # Row index
+            for df1_val in table_df1_display_cols: # Columns for table
+                cv = stats.f.ppf(1 - alpha_f_input, df1_val, int(df2_val)) if df2_val != 'z (∞)' else stats.f.ppf(1-alpha_f_input, df1_val, np.inf) # Should not happen for F
                 row[f"df₁={df1_val}"] = format_value_for_display(cv)
             f_table_data.append(row)
         
@@ -588,21 +647,24 @@ def tab_f_distribution():
 
         def style_f_table(df_to_style):
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-            closest_df2_row_str = str(min(table_df2_rows, key=lambda x: abs(x - df2_f_selected)))
-            if closest_df2_row_str in df_to_style.index:
-                style.loc[closest_df2_row_str, :] = 'background-color: lightblue;'
             
-            closest_df1_col_val = min(table_df1_cols, key=lambda x: abs(x - df1_f_selected))
+            # Highlight selected df2 row (or closest in the window)
+            selected_df2_str = str(df2_f_selected)
+            if selected_df2_str in df_to_style.index:
+                style.loc[selected_df2_str, :] = 'background-color: lightblue;'
+            
+            # Highlight selected df1 col (or closest in the table_df1_display_cols)
+            closest_df1_col_val = min(table_df1_display_cols, key=lambda x: abs(x - df1_f_selected))
             highlight_col_name_f = f"df₁={closest_df1_col_val}"
 
             if highlight_col_name_f in df_to_style.columns:
                 for r_idx in df_to_style.index:
                     current_r_style = style.loc[r_idx, highlight_col_name_f]
-                    style.loc[r_idx, highlight_col_name_f] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
+                    style.loc[r_idx, highlight_col_name_f] = (current_r_style + ';' if current_r_style and not current_r_style.endswith(';') else current_r_style) + 'background-color: lightgreen;'
                 
-                if closest_df2_row_str in df_to_style.index:
-                    current_c_style = style.loc[closest_df2_row_str, highlight_col_name_f]
-                    style.loc[closest_df2_row_str, highlight_col_name_f] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+                if selected_df2_str in df_to_style.index : # Check if the selected df2 is actually in the displayed window
+                    current_c_style = style.loc[selected_df2_str, highlight_col_name_f]
+                    style.loc[selected_df2_str, highlight_col_name_f] = (current_c_style + ';' if current_c_style and not current_c_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
 
         st.markdown(df_f_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
@@ -672,8 +734,8 @@ def tab_chi_square_distribution():
     with col1:
         st.subheader("Inputs")
         alpha_chi2_input = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_chi2_input_tab4")
-        df_chi2_options = list(range(1, 31)) + [40, 50, 60, 70, 80, 90, 100]
-        df_chi2_selected = st.selectbox("Degrees of Freedom (df)", options=df_chi2_options, index=4, key="df_chi2_selectbox_tab4") # Default df=5
+        all_df_chi2_options = list(range(1, 31)) + [35, 40, 45, 50, 60, 70, 80, 90, 100]
+        df_chi2_selected = st.selectbox("Degrees of Freedom (df)", options=all_df_chi2_options, index=all_df_chi2_options.index(5), key="df_chi2_selectbox_tab4") 
         
         tail_chi2 = st.radio("Tail Selection", ("One-tailed (right)", "Two-tailed (e.g. for variance)"), key="tail_chi2_radio_tab4")
         test_stat_chi2 = st.number_input("Calculated χ²-statistic", value=float(df_chi2_selected), format="%.3f", min_value=0.001, key="test_stat_chi2_input_tab4")
@@ -682,13 +744,12 @@ def tab_chi_square_distribution():
         fig_chi2, ax_chi2 = plt.subplots(figsize=(8,5))
         
         plot_min_chi2 = 0.001
-        plot_max_chi2 = 10.0 # Default
+        plot_max_chi2 = 10.0 
         try:
             plot_max_chi2 = max(stats.chi2.ppf(0.999, df_chi2_selected), test_stat_chi2 * 1.5, 10.0)
             if test_stat_chi2 > stats.chi2.ppf(0.999, df_chi2_selected) * 1.2:
                 plot_max_chi2 = test_stat_chi2 * 1.2
-        except Exception:
-            pass
+        except Exception: pass
 
         x_chi2_plot = np.linspace(plot_min_chi2, plot_max_chi2, 500) 
         y_chi2_plot = stats.chi2.pdf(x_chi2_plot, df_chi2_selected)
@@ -701,7 +762,7 @@ def tab_chi_square_distribution():
                 x_fill_upper = np.linspace(crit_val_chi2_upper_plot, plot_max_chi2, 100)
                 ax_chi2.fill_between(x_fill_upper, stats.chi2.pdf(x_fill_upper, df_chi2_selected), color='red', alpha=0.5, label=f'α = {alpha_chi2_input:.4f}')
                 ax_chi2.axvline(crit_val_chi2_upper_plot, color='red', linestyle='--', lw=1)
-        else: # Two-tailed
+        else: 
             crit_val_chi2_upper_plot = stats.chi2.ppf(1 - alpha_chi2_input / 2, df_chi2_selected)
             crit_val_chi2_lower_plot = stats.chi2.ppf(alpha_chi2_input / 2, df_chi2_selected)
             if crit_val_chi2_upper_plot is not None and not np.isnan(crit_val_chi2_upper_plot):
@@ -717,18 +778,17 @@ def tab_chi_square_distribution():
         ax_chi2.set_title(f'χ²-Distribution (df={df_chi2_selected}) with Critical Region(s)')
         ax_chi2.set_xlabel('χ²-value')
         ax_chi2.set_ylabel('Probability Density')
-        ax_chi2.legend()
-        ax_chi2.grid(True, linestyle=':', alpha=0.7)
-        st.pyplot(fig_chi2)
+        ax_chi2.legend(); ax_chi2.grid(True); st.pyplot(fig_chi2)
 
         st.subheader("Critical χ²-Values (Upper Tail)")
+        table_df_window_chi2 = get_dynamic_df_window(all_df_chi2_options, df_chi2_selected, window_size=5)
         table_alpha_cols_chi2 = [0.10, 0.05, 0.025, 0.01, 0.005] 
         
         chi2_table_rows = []
-        for df_iter in df_chi2_options: # Use same df options as selectbox
+        for df_iter in table_df_window_chi2:
             row_data = {'df': str(df_iter)}
             for alpha_col in table_alpha_cols_chi2:
-                cv = stats.chi2.ppf(1 - alpha_col, df_iter)
+                cv = stats.chi2.ppf(1 - alpha_col, int(df_iter)) # df_iter is already numeric from window
                 row_data[f"α = {alpha_col:.3f}"] = format_value_for_display(cv)
             chi2_table_rows.append(row_data)
         
@@ -754,7 +814,7 @@ def tab_chi_square_distribution():
                      style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
                 if selected_df_str in df_to_style.index:
                     current_c_style = style.loc[selected_df_str, highlight_col_name]
-                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
         
         st.markdown(df_chi2_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
@@ -1112,10 +1172,18 @@ def tab_binomial_test():
         ax_b.legend(); ax_b.grid(True); st.pyplot(fig_b)
 
         st.subheader("Probability Table Snippet")
-        k_start_table = max(0, k_success_b - 3)
-        k_end_table = min(n_b, k_success_b + 3)
-        k_range_table = np.arange(k_start_table, k_end_table + 1)
-        
+        # Dynamic window for k
+        all_k_values = list(range(n_b + 1))
+        try:
+            k_selected_idx = all_k_values.index(k_success_b)
+        except ValueError: # Should not happen as k_success_b is within 0 to n_b
+            k_selected_idx = len(all_k_values) // 2
+
+        window_size_k = 5
+        k_start_idx = max(0, k_selected_idx - window_size_k)
+        k_end_idx = min(len(all_k_values), k_selected_idx + window_size_k + 1)
+        k_range_table = all_k_values[k_start_idx:k_end_idx]
+
         if len(k_range_table) > 0:
             table_data_b = {
                 "k": k_range_table,
@@ -1186,11 +1254,11 @@ def tab_tukey_hsd():
     with col1:
         st.subheader("Inputs")
         alpha_tukey = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_tukey_hsd_input")
-        k_tukey_options = list(range(2, 21)) + [25,30,40,50]
-        df_error_options = list(range(1,31)) + [40,60,80,100,120,1000,2000]
+        all_k_tukey_options = list(range(2, 21)) + [25,30,35,40,45,50]
+        all_df_error_options = list(range(1,31)) + [35,40,45,50,60,70,80,90,100,120,1000,2000]
 
-        k_tukey_selected = st.selectbox("Number of Groups (k)", options=k_tukey_options, index=k_tukey_options.index(3), key="k_tukey_selectbox")
-        df_error_tukey_selected = st.selectbox("Degrees of Freedom for Error (df_error)", options=df_error_options, index=df_error_options.index(20), key="df_error_tukey_selectbox")
+        k_tukey_selected = st.selectbox("Number of Groups (k)", options=all_k_tukey_options, index=all_k_tukey_options.index(3), key="k_tukey_selectbox")
+        df_error_tukey_selected = st.selectbox("Degrees of Freedom for Error (df_error)", options=all_df_error_options, index=all_df_error_options.index(20), key="df_error_tukey_selectbox")
         
         test_stat_tukey_q = st.number_input("Calculated q-statistic (for a pair)", value=1.0, format="%.3f", min_value=0.0, key="test_stat_tukey_q_input")
 
@@ -1234,39 +1302,42 @@ def tab_tukey_hsd():
         st.info(f"Critical q source for plot: {source_q_crit_plot}")
 
         st.subheader(f"Critical q-Values for α = {alpha_tukey:.3f}")
-        table_k_cols = [2,3,4,5,6,8,10,12,15,20] 
-        table_df_error_rows = [1,2,3,4,5,10,20,30,60,120,1000]
+        table_k_cols_display = [2,3,4,5,6,7,8,9,10,12,15,20] 
+        table_df_error_window = get_dynamic_df_window(all_df_error_options, df_error_tukey_selected, window_size=5)
+
 
         tukey_table_data = []
-        for df_err in table_df_error_rows:
+        for df_err in table_df_error_window:
+            df_err_calc = int(df_err) # df_err from window is already numeric
             row = {'df_error': str(df_err)}
-            for k_val in table_k_cols:
+            for k_val in table_k_cols_display:
                 q_c_val = None
                 try:
                     from statsmodels.stats.libqsturng import qsturng
-                    q_c_val = qsturng(1 - alpha_tukey, k_val, df_err)
+                    q_c_val = qsturng(1 - alpha_tukey, k_val, df_err_calc)
                 except Exception:
-                    q_c_val = get_tukey_q_from_csv(df_err, k_val, alpha_tukey)
+                    q_c_val = get_tukey_q_from_csv(df_err_calc, k_val, alpha_tukey)
                 row[f"k={k_val}"] = format_value_for_display(q_c_val)
             tukey_table_data.append(row)
         df_tukey_table = pd.DataFrame(tukey_table_data).set_index('df_error')
 
         def style_tukey_table(df_to_style):
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-            closest_df_err_str = str(min(table_df_error_rows, key=lambda x: abs(x - df_error_tukey_selected)))
-            if closest_df_err_str in df_to_style.index:
-                style.loc[closest_df_err_str, :] = 'background-color: lightblue;'
+            selected_df_err_str = str(df_error_tukey_selected) # User's exact selection
             
-            closest_k_col_val = min(table_k_cols, key=lambda x: abs(x - k_tukey_selected))
+            if selected_df_err_str in df_to_style.index: # Check if the exact selected df_error is in the displayed window
+                style.loc[selected_df_err_str, :] = 'background-color: lightblue;'
+            
+            closest_k_col_val = min(table_k_cols_display, key=lambda x: abs(x - k_tukey_selected))
             highlight_col_name = f"k={closest_k_col_val}"
 
             if highlight_col_name in df_to_style.columns:
                 for r_idx in df_to_style.index:
                      current_r_style = style.loc[r_idx, highlight_col_name]
                      style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
-                if closest_df_err_str in df_to_style.index:
-                    current_c_style = style.loc[closest_df_err_str, highlight_col_name]
-                    style.loc[closest_df_err_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+                if selected_df_err_str in df_to_style.index:
+                    current_c_style = style.loc[selected_df_err_str, highlight_col_name]
+                    style.loc[selected_df_err_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
 
         st.markdown(df_tukey_table.style.apply(style_tukey_table, axis=None).to_html(), unsafe_allow_html=True)
@@ -1373,14 +1444,16 @@ def tab_kruskal_wallis():
         st.pyplot(fig_kw)
         
         st.subheader("Critical χ²-Values (Upper Tail)")
-        table_df_options_chi2 = list(range(1, 21)) + [25, 30, 40, 50, 60, 80, 100]
+        all_df_chi2_options_kw = list(range(1, 31)) + [35, 40, 45, 50, 60, 70, 80, 90, 100]
+        table_df_window_chi2_kw = get_dynamic_df_window(all_df_chi2_options_kw, df_kw, window_size=5)
         table_alpha_cols_chi2 = [0.10, 0.05, 0.025, 0.01, 0.005]
 
         chi2_table_rows = []
-        for df_iter in table_df_options_chi2:
+        for df_iter in table_df_window_chi2_kw:
+            df_iter_calc = int(df_iter) # df_iter from window is already numeric
             row_data = {'df': str(df_iter)}
             for alpha_c in table_alpha_cols_chi2:
-                cv = stats.chi2.ppf(1 - alpha_c, df_iter)
+                cv = stats.chi2.ppf(1 - alpha_c, df_iter_calc)
                 row_data[f"α = {alpha_c:.3f}"] = format_value_for_display(cv)
             chi2_table_rows.append(row_data)
         df_chi2_table_kw = pd.DataFrame(chi2_table_rows).set_index('df')
@@ -1389,11 +1462,8 @@ def tab_kruskal_wallis():
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
             selected_df_str = str(df_kw) 
 
-            closest_df_row_val = min(table_df_options_chi2, key=lambda x: abs(x - df_kw)) if df_kw > 0 else None
-            closest_df_row_str = str(closest_df_row_val) if closest_df_row_val is not None else None
-
-            if closest_df_row_str and closest_df_row_str in df_to_style.index:
-                style.loc[closest_df_row_str, :] = 'background-color: lightblue;'
+            if selected_df_str in df_to_style.index:
+                style.loc[selected_df_str, :] = 'background-color: lightblue;'
             
             closest_alpha_col_val = min(table_alpha_cols_chi2, key=lambda x: abs(x - alpha_kw))
             highlight_col_name = f"α = {closest_alpha_col_val:.3f}"
@@ -1402,16 +1472,16 @@ def tab_kruskal_wallis():
                 for r_idx in df_to_style.index:
                     current_r_style = style.loc[r_idx, highlight_col_name]
                     style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
-                if closest_df_row_str and closest_df_row_str in df_to_style.index:
-                    current_c_style = style.loc[closest_df_row_str, highlight_col_name]
-                    style.loc[closest_df_row_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+                if selected_df_str in df_to_style.index:
+                    current_c_style = style.loc[selected_df_str, highlight_col_name]
+                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
         
         if df_kw > 0:
             st.markdown(df_chi2_table_kw.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                                 {'selector': 'td', 'props': [('text-align', 'center')]}])
                                          .apply(style_chi2_table_kw, axis=None).to_html(), unsafe_allow_html=True)
-            st.caption(f"Table shows upper-tail critical χ²-values. Highlighted for df closest to {df_kw} and α closest to your test.")
+            st.caption(f"Table shows upper-tail critical χ²-values. Highlighted for df={df_kw} and α closest to your test.")
         else:
             st.warning("df must be > 0 to generate table (k > 1).")
 
@@ -1513,14 +1583,16 @@ def tab_friedman_test():
         st.pyplot(fig_fr)
 
         st.subheader("Critical χ²-Values (Upper Tail)") # Same table as Kruskal-Wallis
-        table_df_options_chi2_fr = list(range(1, 21)) + [25, 30, 40, 50, 60, 80, 100]
+        all_df_chi2_options_fr = list(range(1, 31)) + [35, 40, 45, 50, 60, 70, 80, 90, 100]
+        table_df_window_chi2_fr = get_dynamic_df_window(all_df_chi2_options_fr, df_fr, window_size=5)
         table_alpha_cols_chi2_fr = [0.10, 0.05, 0.025, 0.01, 0.005]
 
         chi2_table_rows_fr = []
-        for df_iter in table_df_options_chi2_fr:
+        for df_iter in table_df_window_chi2_fr:
+            df_iter_calc = int(df_iter)
             row_data = {'df': str(df_iter)}
             for alpha_c in table_alpha_cols_chi2_fr:
-                cv = stats.chi2.ppf(1 - alpha_c, df_iter)
+                cv = stats.chi2.ppf(1 - alpha_c, df_iter_calc)
                 row_data[f"α = {alpha_c:.3f}"] = format_value_for_display(cv)
             chi2_table_rows_fr.append(row_data)
         df_chi2_table_fr = pd.DataFrame(chi2_table_rows_fr).set_index('df')
@@ -1528,11 +1600,9 @@ def tab_friedman_test():
         def style_chi2_table_fr(df_to_style): # Similar styling to KW
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
             selected_df_str = str(df_fr) 
-            closest_df_row_val = min(table_df_options_chi2_fr, key=lambda x: abs(x - df_fr)) if df_fr > 0 else None
-            closest_df_row_str = str(closest_df_row_val) if closest_df_row_val is not None else None
 
-            if closest_df_row_str and closest_df_row_str in df_to_style.index:
-                style.loc[closest_df_row_str, :] = 'background-color: lightblue;'
+            if selected_df_str in df_to_style.index:
+                style.loc[selected_df_str, :] = 'background-color: lightblue;'
             
             closest_alpha_col_val = min(table_alpha_cols_chi2_fr, key=lambda x: abs(x - alpha_fr))
             highlight_col_name = f"α = {closest_alpha_col_val:.3f}"
@@ -1541,16 +1611,16 @@ def tab_friedman_test():
                 for r_idx in df_to_style.index:
                     current_r_style = style.loc[r_idx, highlight_col_name]
                     style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
-                if closest_df_row_str and closest_df_row_str in df_to_style.index:
-                    current_c_style = style.loc[closest_df_row_str, highlight_col_name]
-                    style.loc[closest_df_row_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+                if selected_df_str in df_to_style.index:
+                    current_c_style = style.loc[selected_df_str, highlight_col_name]
+                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
         
         if df_fr > 0:
             st.markdown(df_chi2_table_fr.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                                 {'selector': 'td', 'props': [('text-align', 'center')]}])
                                          .apply(style_chi2_table_fr, axis=None).to_html(), unsafe_allow_html=True)
-            st.caption(f"Table shows upper-tail critical χ²-values. Highlighted for df closest to {df_fr} and α closest to your test.")
+            st.caption(f"Table shows upper-tail critical χ²-values. Highlighted for df={df_fr} and α closest to your test.")
         else:
             st.warning("df must be > 0 to generate table (k > 1).")
         st.markdown("""
