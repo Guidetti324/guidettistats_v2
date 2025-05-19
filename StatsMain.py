@@ -422,12 +422,14 @@ def tab_z_distribution():
             try:
                 z_target = test_stat_z_hyp 
                 
+                # Determine closest row label string
                 z_target_base_numeric = np.trunc(z_target * 10) / 10.0 
                 
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
+                # Determine closest column label string
                 z_target_second_decimal = round(abs(z_target - closest_row_float_val), 2) 
                 
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
