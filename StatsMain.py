@@ -403,14 +403,14 @@ def tab_z_distribution():
         z_col_vals_str = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
 
         table_data_z_lookup = []
-        for z_r_str in z_row_vals_str:
-            z_r_val = float(z_r_str)
-            row = { 'z': z_r_str } 
-            for z_c_str in z_col_vals_str:
-                z_c_val = float(z_c_str)
+        for z_r_str_idx in z_row_vals_str:
+            z_r_val = float(z_r_str_idx)
+            row = { 'z': z_r_str_idx } 
+            for z_c_str_idx in z_col_vals_str:
+                z_c_val = float(z_c_str_idx)
                 current_z_val = round(z_r_val + z_c_val, 2)
                 prob = stats.norm.cdf(current_z_val)
-                row[z_c_str] = format_value_for_display(prob, decimals=4)
+                row[z_c_str_idx] = format_value_for_display(prob, decimals=4)
             table_data_z_lookup.append(row)
         
         df_z_lookup_table = pd.DataFrame(table_data_z_lookup).set_index('z')
@@ -423,26 +423,28 @@ def tab_z_distribution():
                 z_target = test_stat_z_hyp 
                 
                 # Determine closest row label string
-                z_target_base_numeric = round(z_target,1) 
+                z_target_base_numeric = np.trunc(z_target * 10) / 10.0 # e.g., 1.23 -> 1.2; -1.28 -> -1.2
+                
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
                 # Determine closest column label string
                 z_target_second_decimal = round(abs(z_target - closest_row_float_val), 2) 
+                
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
                 closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_target_second_decimal))
                 highlight_col_label = f"{closest_col_float_val:.2f}"
 
-                # Apply highlights
+
                 if highlight_row_label in style_df.index:
-                    for col_name in style_df.columns:
-                        style_df.loc[highlight_row_label, col_name] = 'background-color: lightblue;'
+                    for col_name_iter in style_df.columns: # Iterate through columns to apply to each cell in the row
+                        style_df.loc[highlight_row_label, col_name_iter] = 'background-color: lightblue;'
                 
                 if highlight_col_label in style_df.columns:
-                    for r_idx in style_df.index:
-                        current_style = style_df.loc[r_idx, highlight_col_label]
-                        style_df.loc[r_idx, highlight_col_label] = (current_style + ';' if current_style and not current_style.endswith(';') else current_style) + 'background-color: lightgreen;'
+                    for r_idx_iter in style_df.index: 
+                        current_style = style_df.loc[r_idx_iter, highlight_col_label]
+                        style_df.loc[r_idx_iter, highlight_col_label] = (current_style + ';' if current_style and not current_style.endswith(';') else current_style) + 'background-color: lightgreen;'
                 
                 if highlight_row_label in style_df.index and highlight_col_label in style_df.columns:
                     current_cell_style = style_df.loc[highlight_row_label, highlight_col_label]
@@ -824,8 +826,7 @@ def tab_mann_whitney_u():
         tail_mw = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_mw_radio")
         u_stat_mw = st.number_input("Calculated U-statistic", value=float(n1_mw*n2_mw/2), format="%.1f", min_value=0.0, max_value=float(n1_mw*n2_mw), key="u_stat_mw_input")
         
-        # Always use Normal Approximation as per rollback request
-        st.info("Using Normal Approximation for Mann-Whitney U test. For small samples (e.g., n1 or n2 < 10), this is an approximation; exact methods/tables are preferred for definitive conclusions.")
+        st.info("This tab uses the Normal Approximation for the Mann-Whitney U test. For small samples (e.g., n1 or n2 < 10), this is an approximation; exact methods/tables are preferred for definitive conclusions.")
 
         mu_u = (n1_mw * n2_mw) / 2
         sigma_u_sq = (n1_mw * n2_mw * (n1_mw + n2_mw + 1)) / 12
@@ -889,6 +890,7 @@ def tab_mann_whitney_u():
         st.markdown(df_z_crit_table_mw.style.apply(style_z_crit_table_mw, axis=None).to_html(), unsafe_allow_html=True)
         st.caption("Compare your calculated z-statistic to these critical z-values.")
 
+
     with col2: 
         st.subheader("P-value Calculation Explanation")
         p_val_calc_mw = float('nan')
@@ -899,7 +901,7 @@ def tab_mann_whitney_u():
         p_val_calc_mw = min(p_val_calc_mw, 1.0) if not np.isnan(p_val_calc_mw) else float('nan')
         
         st.markdown(f"""
-        The U statistic ({u_stat_mw:.1f}) is converted to an approximate z-statistic ({z_calc_mw:.3f}).
+        The U statistic ({u_stat_mw:.1f}) is used to calculate an approximate z-statistic ({z_calc_mw:.3f}).
         The p-value is then derived from the standard normal distribution.
         * **Two-tailed**: `2 * P(Z ≥ |{z_calc_mw:.3f}|)`
         * **One-tailed (right)**: `P(Z ≥ {z_calc_mw:.3f})` 
@@ -1268,7 +1270,7 @@ def tab_tukey_hsd():
 
     with col2: # Summary for Tukey HSD
         st.subheader("P-value Calculation Explanation")
-        p_val_calc_tukey_num = None
+        p_val_calc_tukey_num = float('nan') # Initialize to NaN
         p_val_source = "Not calculated"
         try:
             from statsmodels.stats.libqsturng import psturng 
