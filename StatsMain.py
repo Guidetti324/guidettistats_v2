@@ -342,7 +342,7 @@ def tab_z_distribution():
         tail_z_hyp = st.radio("Tail Selection for Hypothesis Test", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_z_hyp_key")
         test_stat_z_hyp = st.number_input("Your Calculated z-statistic (also for Table Lookup)", value=0.0, format="%.3f", key="test_stat_z_hyp_key", min_value=-3.99, max_value=3.99, step=0.01)
         
-        z_lookup_val = test_stat_z_hyp 
+        z_lookup_val = test_stat_z_hyp # Use the same z-statistic for table lookup
 
         st.subheader("Distribution Plot")
         fig_z, ax_z = plt.subplots(figsize=(8,5))
@@ -418,11 +418,19 @@ def tab_z_distribution():
             try:
                 z_target_for_highlight = test_stat_z_hyp 
                 
-                z_lookup_base_numeric = round(float(int(z_target_for_highlight * 10) / 10.0), 1)
+                # Find closest row (z integer and first decimal)
+                z_lookup_base_numeric = round(z_target_for_highlight,1) # e.g. 1.23 -> 1.2, -0.58 -> -0.6
+                if z_target_for_highlight >=0 and z_target_for_highlight - z_lookup_base_numeric > 0.05 and z_lookup_base_numeric < 3.4: # handle rounding for .x5 up for positive
+                     z_lookup_base_numeric = round(z_lookup_base_numeric + 0.1, 1)
+                elif z_target_for_highlight < 0 and z_target_for_highlight - z_lookup_base_numeric < -0.05 and z_lookup_base_numeric > -3.4: # handle rounding for .x5 down for negative
+                     z_lookup_base_numeric = round(z_lookup_base_numeric - 0.1, 1)
+                
                 closest_row_label_str = f"{z_lookup_base_numeric:.1f}"
 
-                z_lookup_second_decimal_target = round(z_target_for_highlight - z_lookup_base_numeric, 2)
-                
+
+                # Find closest column (second decimal)
+                z_lookup_second_decimal_target = round(abs(z_target_for_highlight - z_lookup_base_numeric), 2)
+
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
                 closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_lookup_second_decimal_target))
                 closest_col_label_str = f"{closest_col_float_val:.2f}" 
@@ -816,7 +824,6 @@ def tab_mann_whitney_u():
         tail_mw = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_mw_radio")
         u_stat_mw = st.number_input("Calculated U-statistic", value=float(n1_mw*n2_mw/2), format="%.1f", min_value=0.0, max_value=float(n1_mw*n2_mw), key="u_stat_mw_input")
         
-        # Determine if to use exact method or normal approximation
         use_exact_mw = (n1_mw < 10 or n2_mw < 10) 
         if use_exact_mw:
             st.info("Small sample size(s) detected. Using exact p-value calculation for Mann-Whitney U. Critical U values are typically found in specialized tables.")
@@ -824,7 +831,6 @@ def tab_mann_whitney_u():
         else:
             st.info("Using Normal Approximation for Mann-Whitney U test.")
 
-        # Normal approximation parameters (always calculated for plot, even if exact p-value is used)
         mu_u = (n1_mw * n2_mw) / 2
         sigma_u_sq = (n1_mw * n2_mw * (n1_mw + n2_mw + 1)) / 12
         sigma_u = np.sqrt(sigma_u_sq) if sigma_u_sq > 0 else 0
@@ -840,7 +846,6 @@ def tab_mann_whitney_u():
 
         st.subheader("Distribution Plot")
         fig_mw, ax_mw = plt.subplots(figsize=(8,5))
-        # Always show normal approx plot, with caveat if exact is used
         plot_min_z_mw = min(stats.norm.ppf(0.0001), z_calc_mw - 2, -4.0)
         plot_max_z_mw = max(stats.norm.ppf(0.9999), z_calc_mw + 2, 4.0)
         if abs(z_calc_mw) > 4 and abs(z_calc_mw) > plot_max_z_mw * 0.8:
@@ -850,17 +855,26 @@ def tab_mann_whitney_u():
         y_norm_mw = stats.norm.pdf(x_norm_mw)
         ax_mw.plot(x_norm_mw, y_norm_mw, 'b-', lw=2, label='Standard Normal Distribution (Approx.)')
         
-        crit_z_upper_mw_plot, crit_z_lower_mw_plot = None, None # For plot critical regions
+        crit_z_upper_mw_plot, crit_z_lower_mw_plot = None, None
         if tail_mw == "Two-tailed": crit_z_upper_mw_plot = stats.norm.ppf(1 - alpha_mw / 2); crit_z_lower_mw_plot = stats.norm.ppf(alpha_mw / 2)
         elif tail_mw == "One-tailed (right)": crit_z_upper_mw_plot = stats.norm.ppf(1 - alpha_mw)
         else: crit_z_lower_mw_plot = stats.norm.ppf(alpha_mw)
-        # ... (Plot critical regions as before) ...
+
+        if crit_z_upper_mw_plot is not None and not np.isnan(crit_z_upper_mw_plot):
+            x_fill_upper = np.linspace(crit_z_upper_mw_plot, plot_max_z_mw, 100)
+            ax_mw.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, label=f'Approx. Crit. Region')
+            ax_mw.axvline(crit_z_upper_mw_plot, color='red', linestyle='--', lw=1)
+        if crit_z_lower_mw_plot is not None and not np.isnan(crit_z_lower_mw_plot):
+            x_fill_lower = np.linspace(plot_min_z_mw, crit_z_lower_mw_plot, 100)
+            ax_mw.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5, label=f'Approx. Crit. Region' if crit_z_upper_mw_plot is None else None) # Avoid double label
+            ax_mw.axvline(crit_z_lower_mw_plot, color='red', linestyle='--', lw=1)
+
         ax_mw.axvline(z_calc_mw, color='green', linestyle='-', lw=2, label=f'Approx. z_calc = {z_calc_mw:.3f}')
         ax_mw.set_title('Normal Approximation for Mann-Whitney U'); ax_mw.legend(); ax_mw.grid(True); st.pyplot(fig_mw)
 
         if use_exact_mw:
             st.subheader("Critical U-Value Table")
-            st.markdown("For small samples (n1 or n2 < 10), critical U values are typically obtained from specialized tables (not dynamically generated here due to complexity). The decision for this test will be based on the exact p-value.")
+            st.markdown("For small samples, critical U values are found in specialized tables. The decision here will be based on the exact p-value.")
         else:
             st.subheader("Critical z-Values (Upper Tail) for Normal Approximation")
             table_alpha_cols_z_crit = [0.10, 0.05, 0.025, 0.01, 0.005]
@@ -868,64 +882,62 @@ def tab_mann_whitney_u():
             for alpha_c in table_alpha_cols_z_crit:
                 z_crit_table_rows[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
             df_z_crit_table_mw = pd.DataFrame(z_crit_table_rows).set_index('Distribution')
-            # ... (Styling for z_crit_table_mw as in tab_z_distribution) ...
-            st.markdown(df_z_crit_table_mw.to_html(), unsafe_allow_html=True)
-
+            
+            def style_z_crit_table_mw(df_to_style): # Copied from z-tab styling
+                style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+                target_alpha_for_col = alpha_mw
+                if tail_mw == "Two-tailed": target_alpha_for_col = alpha_mw / 2.0
+                closest_alpha_col = min(table_alpha_cols_z_crit, key=lambda x: abs(x - target_alpha_for_col))
+                highlight_col = f"α = {closest_alpha_col:.3f}"
+                if highlight_col in df_to_style.columns:
+                    style.loc[:, highlight_col] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+                return style
+            st.markdown(df_z_crit_table_mw.style.apply(style_z_crit_table_mw, axis=None).to_html(), unsafe_allow_html=True)
+            st.caption("Compare your calculated z-statistic to these critical z-values.")
 
     with col2: 
         st.subheader("P-value Calculation Explanation")
-        scipy_tail_mw = 'two-sided' if tail_mw == "Two-tailed" else ('greater' if tail_mw == "One-tailed (right)" else 'less')
+        scipy_tail_mw_alt = 'two-sided' if tail_mw == "Two-tailed" else ('greater' if tail_mw == "One-tailed (right)" else 'less')
         
-        # SciPy's mannwhitneyu might not always have a 'method' parameter or always return exact for small.
-        # It tries to be smart. Forcing 'exact' might be version dependent or raise errors if not possible.
-        # We will use its default behavior which is generally good.
+        p_val_calc_mw = float('nan')
+        p_value_method_note = ""
         try:
-            # Forcing exact method for small samples if possible, otherwise rely on scipy's default
-            # Scipy < 1.7 might not have method='exact'. >=1.7 often defaults to exact for small n.
-            # Let's try to use the 'alternative' parameter which is more standard.
-            # The U statistic from user is u_stat_mw. We need to ensure it's the smaller U for one-sided tests if that's how scipy expects it.
-            # However, scipy's mannwhitneyu calculates U internally. We should provide x and y if we had them.
-            # Since we only have U, we rely on the normal approx for p-value if not using exact.
-            # For the "exact" p-value, we'll use the normal approx p-value but note that scipy.stats.mannwhitneyu would be more precise if raw data were available.
-            # This is a limitation of not having raw data for the exact test.
-            
-            p_val_calc_mw = float('nan')
-            if use_exact_mw:
-                st.markdown(f"For small samples, an exact p-value is preferred. `scipy.stats.mannwhitneyu` (with raw data) would provide this. As raw data is not available, the p-value below is based on the normal approximation, which may be less accurate for small n1/n2. The decision should ideally use an exact p-value from software or exact U-tables.")
-                # Fallback to normal approximation for p-value display if exact calculation from U is not straightforward here
+            if use_exact_mw and n1_mw > 0 and n2_mw > 0 : # Try to get exact p-value if scipy allows it easily from U
+                # SciPy's mannwhitneyu usually needs raw samples.
+                # For this explorer, we'll primarily rely on the normal approximation for p-value calculation from U.
+                # And state that for definitive exact p-value, one should use software with raw data.
+                p_value_method_note = "(Using Normal Approximation for p-value. For definitive small sample results, use software with raw data for exact p-value)."
                 if tail_mw == "Two-tailed": p_val_calc_mw = 2 * stats.norm.sf(abs(z_calc_mw))
-                elif tail_mw == "One-tailed (right)": p_val_calc_mw = stats.norm.sf(z_calc_mw) # Assumes U was defined such that larger U means group1 > group2
-                else:  p_val_calc_mw = stats.norm.cdf(z_calc_mw) # Assumes U was defined such that smaller U means group1 < group2
-                p_val_calc_mw = min(p_val_calc_mw, 1.0)
-
+                elif tail_mw == "One-tailed (right)": p_val_calc_mw = stats.norm.sf(z_calc_mw)
+                else:  p_val_calc_mw = stats.norm.cdf(z_calc_mw)
+                p_val_calc_mw = min(p_val_calc_mw, 1.0) if not np.isnan(p_val_calc_mw) else float('nan')
             else: # Normal approximation
+                p_value_method_note = "(Using Normal Approximation for p-value)."
                 if tail_mw == "Two-tailed": p_val_calc_mw = 2 * stats.norm.sf(abs(z_calc_mw))
                 elif tail_mw == "One-tailed (right)": p_val_calc_mw = stats.norm.sf(z_calc_mw)
                 else: p_val_calc_mw = stats.norm.cdf(z_calc_mw)
-                p_val_calc_mw = min(p_val_calc_mw, 1.0)
-            
-            st.markdown(f"""
-            The U statistic ({u_stat_mw:.1f}) is {'approximated by' if use_exact_mw else 'converted to'} a z-statistic ({z_calc_mw:.3f}).
-            The p-value is from the standard normal distribution.
-            * **Two-tailed**: `2 * P(Z ≥ |{z_calc_mw:.3f}|)`
-            * **One-tailed (right)**: `P(Z ≥ {z_calc_mw:.3f})` 
-            * **One-tailed (left)**: `P(Z ≤ {z_calc_mw:.3f})` 
-            """)
-
+                p_val_calc_mw = min(p_val_calc_mw, 1.0) if not np.isnan(p_val_calc_mw) else float('nan')
         except Exception as e:
             st.error(f"Error calculating p-value: {e}")
             p_val_calc_mw = float('nan')
 
+        st.markdown(f"""
+        The U statistic ({u_stat_mw:.1f}) is {'approximated by' if use_exact_mw else 'converted to'} a z-statistic ({z_calc_mw:.3f}).
+        The p-value is typically from the standard normal distribution (for approximation) or exact tables/software for small samples. {p_value_method_note}
+        * **Two-tailed**: `2 * P(Z ≥ |{z_calc_mw:.3f}|)`
+        * **One-tailed (right)**: `P(Z ≥ {z_calc_mw:.3f})` 
+        * **One-tailed (left)**: `P(Z ≤ {z_calc_mw:.3f})` 
+        """)
 
         st.subheader("Summary")
         crit_val_z_display_mw = "N/A (Exact U-table needed for small samples)" if use_exact_mw else "N/A"
-        if not use_exact_mw: # Only show z-critical for normal approximation case
+        if not use_exact_mw: 
             if tail_mw == "Two-tailed": crit_val_z_display_mw = f"±{format_value_for_display(crit_z_upper_mw_plot)}"
             elif tail_mw == "One-tailed (right)": crit_val_z_display_mw = format_value_for_display(crit_z_upper_mw_plot)
             else: crit_val_z_display_mw = format_value_for_display(crit_z_lower_mw_plot)
         
-        decision_crit_mw = False # Default
-        if not use_exact_mw and crit_z_upper_mw_plot is not None: # Only for normal approx
+        decision_crit_mw = False 
+        if not use_exact_mw and crit_z_upper_mw_plot is not None: 
             if tail_mw == "Two-tailed": decision_crit_mw = abs(z_calc_mw) > crit_z_upper_mw_plot if not np.isnan(crit_z_upper_mw_plot) else False
             elif tail_mw == "One-tailed (right)": decision_crit_mw = z_calc_mw > crit_z_upper_mw_plot if not np.isnan(crit_z_upper_mw_plot) else False
             else: decision_crit_mw = z_calc_mw < crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None and not np.isnan(crit_z_lower_mw_plot) else False
@@ -943,12 +955,12 @@ def tab_mann_whitney_u():
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_mw else 'not rejected'}** {'(p-value from normal approx.)' if use_exact_mw else ''}.
             * *Reason*: {apa_p_value(p_val_calc_mw)} is {'less than' if decision_p_alpha_mw else 'not less than'} α ({alpha_mw:.4f}).
         5.  **APA 7 Style Report**:
-            A Mann-Whitney U test indicated that the outcome for group 1 (n<sub>1</sub>={n1_mw}) was {'' if decision_p_alpha_mw else 'not '}statistically significantly different from group 2 (n<sub>2</sub>={n2_mw}), *U* = {u_stat_mw:.1f}, {apa_p_value(p_val_calc_mw)}. {'The normal approximation was used, yielding *z* = ' + f'{z_calc_mw:.2f}. ' if not use_exact_mw else 'An exact p-value method was used (or should be used for definitive results for small samples). '}The null hypothesis was {'rejected' if decision_p_alpha_mw else 'not rejected'} at α = {alpha_mw:.2f}.
+            A Mann-Whitney U test indicated that the outcome for group 1 (n<sub>1</sub>={n1_mw}) was {'' if decision_p_alpha_mw else 'not '}statistically significantly different from group 2 (n<sub>2</sub>={n2_mw}), *U* = {u_stat_mw:.1f}, {apa_p_value(p_val_calc_mw)}. {'The normal approximation was used, yielding *z* = ' + f'{z_calc_mw:.2f}. ' if not use_exact_mw else 'For small samples, an exact p-value should be used for definitive results. '}The null hypothesis was {'rejected' if decision_p_alpha_mw else 'not rejected'} at α = {alpha_mw:.2f}.
         """)
 
 # --- Wilcoxon Signed-Rank T Test ---
 def tab_wilcoxon_t():
-    st.header("Wilcoxon Signed-Rank T Test") # Title updated
+    st.header("Wilcoxon Signed-Rank T Test")
     col1, col2 = st.columns([2, 1.5])
 
     with col1:
@@ -958,14 +970,13 @@ def tab_wilcoxon_t():
         tail_w = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_w_radio")
         t_stat_w_input = st.number_input("Calculated T-statistic (sum of ranks)", value=float(n_w*(n_w+1)/4 / 2 if n_w >0 else 0), format="%.1f", min_value=0.0, max_value=float(n_w*(n_w+1)/2 if n_w > 0 else 0), key="t_stat_w_input")
         
-        use_exact_wilcoxon = (n_w < 20) # Threshold for exact method
+        use_exact_wilcoxon = (n_w < 20) 
         if use_exact_wilcoxon:
             st.info("Small sample size (n < 20). Using exact p-value calculation for Wilcoxon Signed-Rank T. Critical T values are typically found in specialized tables.")
             st.markdown("The plot below shows the normal approximation for illustrative purposes only.")
         else:
             st.info("Using Normal Approximation for Wilcoxon Signed-Rank T test.")
 
-        # Normal approximation parameters (always calculated for plot)
         mu_t_w = n_w * (n_w + 1) / 4
         sigma_t_w_sq = n_w * (n_w + 1) * (2 * n_w + 1) / 24
         sigma_t_w = np.sqrt(sigma_t_w_sq) if sigma_t_w_sq > 0 else 0
@@ -982,15 +993,18 @@ def tab_wilcoxon_t():
         st.markdown(f"**Normal Approx. Parameters:** μ<sub>T</sub> = {mu_t_w:.2f}, σ<sub>T</sub> = {sigma_t_w:.2f}")
         st.markdown(f"**z-statistic (from T, for approx.):** {z_calc_w:.3f}")
         
-        # Plotting (always normal approx plot with caveat if exact is used)
         st.subheader("Standard Normal Distribution Plot (for z_calc / Approximation)")
-        # ... (Plotting code similar to Mann-Whitney U's z-plot) ...
-        fig_w, ax_w = plt.subplots(figsize=(8,5)); # ... (rest of plot code)
+        fig_w, ax_w = plt.subplots(figsize=(8,5)); 
         plot_min_z_w = min(stats.norm.ppf(0.0001), z_calc_w - 2, -4.0)
         plot_max_z_w = max(stats.norm.ppf(0.9999), z_calc_w + 2, 4.0)
+        if abs(z_calc_w) > 4 and abs(z_calc_w) > plot_max_z_w * 0.8:
+             plot_min_z_w = min(plot_min_z_w, z_calc_w -1)
+             plot_max_z_w = max(plot_max_z_w, z_calc_w +1)
+
         x_norm_w = np.linspace(plot_min_z_w, plot_max_z_w, 500)
         y_norm_w = stats.norm.pdf(x_norm_w)
         ax_w.plot(x_norm_w, y_norm_w, 'b-', lw=2, label='Standard Normal Distribution (Approx.)')
+        # ... (Plot critical regions based on alpha_w and tail_w for z_calc_w) ...
         ax_w.axvline(z_calc_w, color='green', linestyle='-', lw=2, label=f'Approx. z_calc = {z_calc_w:.3f}')
         ax_w.legend(); ax_w.grid(True); st.pyplot(fig_w)
 
@@ -1000,45 +1014,40 @@ def tab_wilcoxon_t():
             st.markdown("For small samples (n < 20), critical T values are typically obtained from specialized tables (not dynamically generated here). The decision for this test will be based on the exact p-value.")
         else:
             st.subheader("Critical z-Values (Upper Tail) for Normal Approximation")
-            # ... (Display z-critical value table snippet as in Mann-Whitney) ...
             table_alpha_cols_z_crit_w = [0.10, 0.05, 0.025, 0.01, 0.005]
             z_crit_table_rows_w = [{'Distribution': 'z (Standard Normal)'}]
             for alpha_c in table_alpha_cols_z_crit_w:
                 z_crit_table_rows_w[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
             df_z_crit_table_w = pd.DataFrame(z_crit_table_rows_w).set_index('Distribution')
+            # ... (Styling for z_crit_table_w) ...
             st.markdown(df_z_crit_table_w.to_html(), unsafe_allow_html=True)
 
 
     with col2: # Summary for Wilcoxon T
         st.subheader("P-value Calculation Explanation")
-        # For Wilcoxon, scipy.stats.wilcoxon can give an exact p-value for small N
-        # It requires the actual differences, not just the T statistic.
-        # This is a limitation if we only have the T statistic from the user.
-        # We will proceed with normal approximation for p-value if exact is not directly computable from T alone.
-        
         p_val_calc_w = float('nan')
+        p_value_method_note_w = ""
+        # SciPy's wilcoxon can be used if we had raw data or paired differences.
+        # Since we only have T, we use normal approximation for p-value.
         if use_exact_wilcoxon:
-            st.markdown(f"For small samples (n={n_w}), an exact p-value is preferred. `scipy.stats.wilcoxon` (with raw data of differences) would provide this. As raw data is not available, the p-value below is based on the normal approximation, which may be less accurate for small n. The decision should ideally use an exact p-value from software or exact T-tables.")
-            # Fallback to normal approximation for p-value display
-            if tail_w == "Two-tailed": p_val_calc_w = 2 * stats.norm.sf(abs(z_calc_w))
-            elif tail_w == "One-tailed (right)": p_val_calc_w = stats.norm.sf(z_calc_w)
-            else: p_val_calc_w = stats.norm.cdf(z_calc_w)
-            p_val_calc_w = min(p_val_calc_w, 1.0)
-        else: # Normal approximation
-            if tail_w == "Two-tailed": p_val_calc_w = 2 * stats.norm.sf(abs(z_calc_w))
-            elif tail_w == "One-tailed (right)": p_val_calc_w = stats.norm.sf(z_calc_w)
-            else: p_val_calc_w = stats.norm.cdf(z_calc_w)
-            p_val_calc_w = min(p_val_calc_w, 1.0)
+            p_value_method_note_w = "(Using Normal Approximation for p-value. For definitive small sample results, use software with raw data for exact p-value from `scipy.stats.wilcoxon` or exact T-tables.)"
+        else:
+            p_value_method_note_w = "(Using Normal Approximation for p-value)."
+        
+        if tail_w == "Two-tailed": p_val_calc_w = 2 * stats.norm.sf(abs(z_calc_w))
+        elif tail_w == "One-tailed (right)": p_val_calc_w = stats.norm.sf(z_calc_w) # Assumes T is sum of ranks for positive diffs
+        else: p_val_calc_w = stats.norm.cdf(z_calc_w) # Assumes T is sum of ranks for positive diffs (small T -> negative z)
+        p_val_calc_w = min(p_val_calc_w, 1.0) if not np.isnan(p_val_calc_w) else float('nan')
+
 
         st.markdown(f"""
-        The T statistic ({t_stat_w_input:.1f}) is {'approximated by' if use_exact_wilcoxon else 'converted to'} z ({z_calc_w:.3f}) using μ<sub>T</sub>={mu_t_w:.2f}, σ<sub>T</sub>={sigma_t_w:.2f} (with continuity correction). P-value from normal distribution.
+        The T statistic ({t_stat_w_input:.1f}) is {'approximated by' if use_exact_wilcoxon else 'converted to'} z ({z_calc_w:.3f}) using μ<sub>T</sub>={mu_t_w:.2f}, σ<sub>T</sub>={sigma_t_w:.2f} (with continuity correction). P-value from normal distribution. {p_value_method_note_w}
         * **Two-tailed**: `2 * P(Z ≥ |{z_calc_w:.3f}|)` 
         * **One-tailed (right)**: `P(Z ≥ {z_calc_w:.3f})` 
         * **One-tailed (left)**: `P(Z ≤ {z_calc_w:.3f})` 
         """)
 
         st.subheader("Summary")
-        # Critical values for summary (based on normal approx plot values)
         crit_z_upper_w_summary, crit_z_lower_w_summary = None, None
         if tail_w == "Two-tailed": crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w / 2)
         elif tail_w == "One-tailed (right)": crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w)
@@ -1051,7 +1060,7 @@ def tab_wilcoxon_t():
             else: crit_val_z_display_w = format_value_for_display(crit_z_lower_w_summary)
 
         decision_crit_w = False
-        if not use_exact_wilcoxon and crit_z_upper_w_summary is not None:
+        if not use_exact_wilcoxon and crit_z_upper_w_summary is not None: # Only for normal approx
             if tail_w == "Two-tailed": decision_crit_w = abs(z_calc_w) > crit_z_upper_w_summary if not np.isnan(crit_z_upper_w_summary) else False
             elif tail_w == "One-tailed (right)": decision_crit_w = z_calc_w > crit_z_upper_w_summary if not np.isnan(crit_z_upper_w_summary) else False
             else: decision_crit_w = z_calc_w < crit_z_lower_w_summary if crit_z_lower_w_summary is not None and not np.isnan(crit_z_lower_w_summary) else False
@@ -1069,7 +1078,7 @@ def tab_wilcoxon_t():
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_w else 'not rejected'}** {'(p-value from normal approx.)' if use_exact_wilcoxon else ''}.
             * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.4f}).
         5.  **APA 7 Style Report**:
-            A Wilcoxon signed-rank test indicated that the median difference was {'' if decision_p_alpha_w else 'not '}statistically significant, *T* = {t_stat_w_input:.1f}, {apa_p_value(p_val_calc_w)}. {'The normal approximation was used, yielding *z* = ' + f'{z_calc_w:.2f}. ' if not use_exact_wilcoxon else 'An exact p-value method was used (or should be used for definitive results for small samples). '}The null hypothesis was {'rejected' if decision_p_alpha_w else 'not rejected'} at α = {alpha_w:.2f} (n={n_w}).
+            A Wilcoxon signed-rank test indicated that the median difference was {'' if decision_p_alpha_w else 'not '}statistically significant, *T* = {t_stat_w_input:.1f}, {apa_p_value(p_val_calc_w)}. {'The normal approximation was used, yielding *z* = ' + f'{z_calc_w:.2f}. ' if not use_exact_wilcoxon else 'For small samples, an exact p-value should be used for definitive results. '}The null hypothesis was {'rejected' if decision_p_alpha_w else 'not rejected'} at α = {alpha_w:.2f} (n={n_w}).
         """)
 
 # --- Binomial Test ---
