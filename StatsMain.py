@@ -340,7 +340,7 @@ def tab_z_distribution():
         st.subheader("Inputs")
         alpha_z_hyp = st.number_input("Alpha (α) for Hypothesis Test", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_z_hyp_key")
         tail_z_hyp = st.radio("Tail Selection for Hypothesis Test", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_z_hyp_key")
-        test_stat_z_hyp = st.number_input("Your Calculated z-statistic (also used for Table Lookup)", value=0.0, format="%.3f", key="test_stat_z_hyp_key", min_value=-3.99, max_value=3.99, step=0.01)
+        test_stat_z_hyp = st.number_input("Your Calculated z-statistic (also for Table Lookup)", value=0.0, format="%.3f", key="test_stat_z_hyp_key", min_value=-3.99, max_value=3.99, step=0.01)
         
         z_lookup_val = test_stat_z_hyp # Use the same z-statistic for table lookup
 
@@ -416,30 +416,29 @@ def tab_z_distribution():
             style_df = pd.DataFrame('', index=data.index, columns=data.columns)
             
             try:
-                z_target_for_highlight = test_stat_z_hyp # Use the main z-statistic
+                z_target_for_highlight = test_stat_z_hyp 
                 
-                # Determine the row label (z-score integer and first decimal)
                 z_lookup_base_numeric = round(float(int(z_target_for_highlight * 10) / 10.0), 1)
                 closest_row_label_str = f"{z_lookup_base_numeric:.1f}"
 
-                # Determine the column label (z-score second decimal)
                 z_lookup_second_decimal_target = round(z_target_for_highlight - z_lookup_base_numeric, 2)
-                closest_col_label_str = f"{z_lookup_second_decimal_target:.2f}"
                 
-                # Apply row highlight
+                actual_col_labels_float = [float(col_str) for col_str in data.columns]
+                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_lookup_second_decimal_target))
+                closest_col_label_str = f"{closest_col_float_val:.2f}" 
+
+
                 if closest_row_label_str in style_df.index:
                     style_df.loc[closest_row_label_str, :] = 'background-color: lightblue;'
                 
-                # Apply column highlight
                 if closest_col_label_str in style_df.columns:
-                    # Need to iterate to append style, otherwise it overwrites
                     for r_idx in style_df.index:
                         current_style = style_df.loc[r_idx, closest_col_label_str]
-                        style_df.loc[r_idx, closest_col_label_str] = (current_style + ';' if current_style else '') + 'background-color: lightgreen;'
-
-                # Apply specific cell highlight (this will override/append)
+                        style_df.loc[r_idx, closest_col_label_str] = (current_style + ';' if current_style and not current_style.endswith(';') else current_style) + 'background-color: lightgreen;'
+                
                 if closest_row_label_str in style_df.index and closest_col_label_str in style_df.columns:
-                    style_df.loc[closest_row_label_str, closest_col_label_str] = 'background-color: yellow; font-weight: bold; border: 2px solid red;'
+                    current_cell_style = style_df.loc[closest_row_label_str, closest_col_label_str]
+                    style_df.loc[closest_row_label_str, closest_col_label_str] = (current_cell_style + ';' if current_cell_style and not current_cell_style.endswith(';') else current_cell_style) + 'font-weight: bold; border: 2px solid red; background-color: yellow;' # Ensure cell highlight is distinct
             
             except Exception: 
                 pass 
@@ -496,7 +495,7 @@ def tab_z_distribution():
         """)
 
 
-# --- Tab 3: F-distribution (Fully Implemented) ---
+# --- Tab 3: F-distribution ---
 def tab_f_distribution():
     st.header("F-Distribution Explorer")
     col1, col2 = st.columns([2, 1.5])
