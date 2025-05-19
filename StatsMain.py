@@ -340,7 +340,7 @@ def tab_z_distribution():
         st.subheader("Inputs")
         alpha_z_hyp = st.number_input("Alpha (α) for Hypothesis Test", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_z_hyp_key")
         tail_z_hyp = st.radio("Tail Selection for Hypothesis Test", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_z_hyp_key")
-        test_stat_z_hyp = st.number_input("Your Calculated z-statistic (for Hypothesis Test & Table Lookup)", value=0.0, format="%.3f", key="test_stat_z_hyp_key")
+        test_stat_z_hyp = st.number_input("Your Calculated z-statistic (also used for Table Lookup)", value=0.0, format="%.3f", key="test_stat_z_hyp_key", min_value=-3.99, max_value=3.99, step=0.01)
         
         z_lookup_val = test_stat_z_hyp # Use the same z-statistic for table lookup
 
@@ -360,9 +360,7 @@ def tab_z_distribution():
         # Highlight area for z_lookup_val (which is test_stat_z_hyp)
         x_fill_lookup = np.linspace(plot_min_z, z_lookup_val, 100)
         ax_z.fill_between(x_fill_lookup, stats.norm.pdf(x_fill_lookup), color='skyblue', alpha=0.5, label=f'P(Z < {z_lookup_val:.3f})')
-        ax_z.axvline(z_lookup_val, color='orange', linestyle=':', lw=2, label=f'z_lookup = {z_lookup_val:.3f}')
-
-
+        
         crit_val_z_upper_plot, crit_val_z_lower_plot = None, None 
         if tail_z_hyp == "Two-tailed":
             crit_val_z_upper_plot = stats.norm.ppf(1 - alpha_z_hyp / 2)
@@ -388,8 +386,7 @@ def tab_z_distribution():
                 ax_z.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.3, label=f'Crit. Region α')
                 ax_z.axvline(crit_val_z_lower_plot, color='red', linestyle='--', lw=1)
 
-        # Test statistic line (already covered by z_lookup if it's the same)
-        # ax_z.axvline(test_stat_z_hyp, color='green', linestyle='-', lw=2, label=f'Your z-stat = {test_stat_z_hyp:.3f}')
+        ax_z.axvline(test_stat_z_hyp, color='green', linestyle='-', lw=2, label=f'Your z-stat = {test_stat_z_hyp:.3f}')
         ax_z.set_title('Standard Normal Distribution')
         ax_z.set_xlabel('z-value')
         ax_z.set_ylabel('Probability Density')
@@ -419,28 +416,28 @@ def tab_z_distribution():
             style_df = pd.DataFrame('', index=data.index, columns=data.columns)
             
             try:
-                # Use test_stat_z_hyp for highlighting
-                z_target_for_highlight = test_stat_z_hyp
+                z_target_for_highlight = test_stat_z_hyp # Use the main z-statistic
                 
-                z_lookup_base_str = f"{float(z_target_for_highlight):.1f}" 
+                # Determine the row label (z-score integer and first decimal)
+                z_lookup_base_numeric = round(float(int(z_target_for_highlight * 10) / 10.0), 1)
+                closest_row_label_str = f"{z_lookup_base_numeric:.1f}"
+
+                # Determine the column label (z-score second decimal)
+                z_lookup_second_decimal_target = round(z_target_for_highlight - z_lookup_base_numeric, 2)
+                closest_col_label_str = f"{z_lookup_second_decimal_target:.2f}"
                 
-                actual_row_labels_float = [float(label) for label in data.index]
-                closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - float(z_lookup_base_str)))
-                closest_row_label_str = f"{closest_row_float_val:.1f}" 
-
-                z_lookup_second_decimal_target = round(z_target_for_highlight - float(closest_row_label_str), 2)
-                
-                actual_col_labels_float = [float(col_str) for col_str in data.columns]
-                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_lookup_second_decimal_target))
-                closest_col_label_str = f"{closest_col_float_val:.2f}" 
-
-
+                # Apply row highlight
                 if closest_row_label_str in style_df.index:
                     style_df.loc[closest_row_label_str, :] = 'background-color: lightblue;'
                 
+                # Apply column highlight
                 if closest_col_label_str in style_df.columns:
-                    style_df.loc[:, closest_col_label_str] += ' background-color: lightgreen;' 
-                
+                    # Need to iterate to append style, otherwise it overwrites
+                    for r_idx in style_df.index:
+                        current_style = style_df.loc[r_idx, closest_col_label_str]
+                        style_df.loc[r_idx, closest_col_label_str] = (current_style + ';' if current_style else '') + 'background-color: lightgreen;'
+
+                # Apply specific cell highlight (this will override/append)
                 if closest_row_label_str in style_df.index and closest_col_label_str in style_df.columns:
                     style_df.loc[closest_row_label_str, closest_col_label_str] = 'background-color: yellow; font-weight: bold; border: 2px solid red;'
             
@@ -1222,7 +1219,7 @@ def tab_tukey_hsd():
             from statsmodels.stats.libqsturng import qsturng
             q_crit_tukey_plot = qsturng(1 - alpha_tukey, k_tukey_selected, df_error_tukey_selected)
             source_q_crit_plot = "statsmodels"
-        except Exception: # Broad exception for import or calculation error
+        except Exception: 
             q_crit_tukey_plot = get_tukey_q_from_csv(df_error_tukey_selected, k_tukey_selected, alpha_tukey)
             source_q_crit_plot = "CSV Fallback" if q_crit_tukey_plot is not None else "Not Found"
         
@@ -1232,7 +1229,7 @@ def tab_tukey_hsd():
             if test_stat_tukey_q > q_crit_tukey_plot * 1.2: plot_max_q = test_stat_tukey_q * 1.2
             
             x_placeholder = np.linspace(0.01, plot_max_q, 200)
-            try: # Gamma as placeholder
+            try: 
                 shape_param = float(k_tukey_selected) 
                 scale_param = max(q_crit_tukey_plot, test_stat_tukey_q, 1.0) / (shape_param * 2 if shape_param > 0 else 2) 
                 if shape_param <=0 : shape_param = 2.0 
@@ -1252,7 +1249,7 @@ def tab_tukey_hsd():
         st.info(f"Critical q source for plot: {source_q_crit_plot}")
 
         st.subheader(f"Critical q-Values for α = {alpha_tukey:.3f}")
-        table_k_cols = [2,3,4,5,6,8,10,12,15,20] # Common k values
+        table_k_cols = [2,3,4,5,6,8,10,12,15,20] 
         table_df_error_rows = [1,2,3,4,5,10,20,30,60,120,1000]
 
         tukey_table_data = []
@@ -1312,7 +1309,7 @@ def tab_tukey_hsd():
         """)
 
         st.subheader("Summary")
-        q_crit_tukey_summary = q_crit_tukey_plot # Use the one calculated for the plot
+        q_crit_tukey_summary = q_crit_tukey_plot 
         
         decision_crit_tukey = False
         if isinstance(q_crit_tukey_summary, (int, float)) and not np.isnan(q_crit_tukey_summary):
@@ -1327,7 +1324,7 @@ def tab_tukey_hsd():
             reason_p_alpha_tukey_display = f"Because {apa_p_value(p_val_calc_tukey_num)} is {'less than' if decision_p_alpha_tukey else 'not less than'} α ({alpha_tukey:.4f})."
         else:
             reason_p_alpha_tukey_display = "p-value for q_calc not computed."
-            if decision_crit_tukey: # Fallback to crit value method if p-value not computed
+            if decision_crit_tukey: 
                  decision_p_alpha_tukey = True
                  reason_p_alpha_tukey_display = "Decision based on critical value method (p-value for q_calc not computed)."
 
