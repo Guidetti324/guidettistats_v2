@@ -1286,7 +1286,7 @@ def tab_tukey_hsd():
                 ax_tukey.fill_between(x_fill_crit, y_fill_crit, color='red', alpha=0.5)
             except Exception:
                  ax_tukey.text(0.5, 0.6, "Plotting error for conceptual shape.", ha='center')
-            ax_tukey.axvline(test_stat_tukey_q, color='green', linestyle='-', lw=2, label=f'Test q = {test_stat_tukey_q:.3f}')
+            ax_tukey.axvline(test_stat_tukey_q, color='green', linestyle='-', lw=2, label=f'Test q = {test_stat_tukey_q:.3f}') # This line uses test_stat_tukey_q
         else:
             ax_tukey.text(0.5, 0.5, "Critical q not available for plotting.", ha='center')
         ax_tukey.set_title(f'Conceptual q-Distribution (α={alpha_tukey:.3f})'); ax_tukey.legend(); ax_tukey.grid(True); st.pyplot(fig_tukey)
@@ -1337,19 +1337,26 @@ def tab_tukey_hsd():
 
     with col2: # Summary for Tukey HSD
         st.subheader("P-value Calculation Explanation")
-        p_val_calc_tukey_num = float('nan') # Corrected Initialization
+        p_val_calc_tukey_num = float('nan') # CORRECTED INITIALIZATION
         p_val_source = "Not calculated"
-        try:
-            from statsmodels.stats.libqsturng import psturng 
-            if test_stat_tukey_q is not None and k_tukey_selected > 0 and df_error_tukey_selected > 0:
-                 p_val_calc_tukey_num = 1 - psturng(test_stat_tukey_q, float(k_tukey_selected), float(df_error_tukey_selected))
-                 p_val_calc_tukey_num = max(0, min(p_val_calc_tukey_num, 1.0)) 
-                 p_val_source = "statsmodels.stats.libqsturng.psturng"
-        except ImportError:
-            p_val_source = "statsmodels not available for p-value calc."
-        except Exception as e_psturng:
-            p_val_source = f"Error during p-value calc with psturng: {e_psturng}"
+        psturng_func = None 
 
+        try:
+            from statsmodels.stats.libqsturng import psturng as psturng_imported
+            psturng_func = psturng_imported 
+        except ImportError:
+            p_val_source = "statsmodels.stats.libqsturng.psturng module/function not found."
+        
+        if psturng_func: 
+            try:
+                if test_stat_tukey_q is not None and k_tukey_selected > 0 and df_error_tukey_selected > 0:
+                    p_val_calc_tukey_num = 1 - psturng_func(test_stat_tukey_q, float(k_tukey_selected), float(df_error_tukey_selected))
+                    p_val_calc_tukey_num = max(0, min(p_val_calc_tukey_num, 1.0)) 
+                    p_val_source = "statsmodels.stats.libqsturng.psturng"
+            except Exception as e_psturng: 
+                p_val_source = f"Error during p-value calculation: {e_psturng}"
+                p_val_calc_tukey_num = float('nan') 
+        
         st.markdown(f"""
         The p-value for a specific calculated q-statistic ({test_stat_tukey_q:.3f}) from Tukey's HSD is P(Q ≥ {test_stat_tukey_q:.3f}).
         * Source for p-value: {p_val_source}
@@ -1369,13 +1376,12 @@ def tab_tukey_hsd():
         if isinstance(p_val_calc_tukey_num, (int, float)) and not np.isnan(p_val_calc_tukey_num):
             decision_p_alpha_tukey = p_val_calc_tukey_num < alpha_tukey
             reason_p_alpha_tukey_display = f"Because {apa_p_value(p_val_calc_tukey_num)} is {'less than' if decision_p_alpha_tukey else 'not less than'} α ({alpha_tukey:.4f})."
-        else:
-            reason_p_alpha_tukey_display = "p-value for q_calc not computed."
+        else: 
+            reason_p_alpha_tukey_display = "p-value for q_calc not computed or resulted in error."
             if decision_crit_tukey: 
-                 decision_p_alpha_tukey = True
-                 reason_p_alpha_tukey_display = "Decision based on critical value method (p-value for q_calc not computed)."
-
-
+                 decision_p_alpha_tukey = True 
+                 reason_p_alpha_tukey_display += " Decision aligned with critical value method."
+            
         st.markdown(f"""
         1.  **Critical q-value**: {format_value_for_display(q_crit_tukey_summary)} (Source: {source_q_crit_plot})
             * *Associated significance level (α)*: {alpha_tukey:.4f}
@@ -1388,7 +1394,6 @@ def tab_tukey_hsd():
         5.  **APA 7 Style Report (for this specific comparison)**:
             A Tukey HSD comparison for one pair yielded *q*({k_tukey_selected}, {df_error_tukey_selected}) = {test_stat_tukey_q:.2f}. {('The associated p-value was ' + apa_p_value(p_val_calc_tukey_num) + '. ') if p_val_calc_tukey_num is not None and not np.isnan(p_val_calc_tukey_num) else ''}The null hypothesis of no difference for this pair was {'rejected' if decision_p_alpha_tukey else 'not rejected'} at α = {alpha_tukey:.2f}.
         """)
-
 
 # --- Kruskal-Wallis H Test ---
 def tab_kruskal_wallis():
