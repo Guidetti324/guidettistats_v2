@@ -140,6 +140,7 @@ def get_tukey_q_from_csv(df_error, k, alpha):
 
 
 # --- Tab 1: t-distribution ---
+# (Code from previous correct version)
 def tab_t_distribution():
     st.header("t-Distribution Explorer")
     col1, col2 = st.columns([2, 1.5]) 
@@ -417,39 +418,41 @@ def tab_z_distribution():
 
         def style_z_lookup_table(df_to_style):
             data = df_to_style 
-            style = pd.DataFrame('', index=data.index, columns=data.columns)
+            style_df = pd.DataFrame('', index=data.index, columns=data.columns)
             
             try:
-                # Find closest row (z integer and first decimal)
-                # Ensure z_lookup_val is treated as float for precise rounding for base
                 z_lookup_base_str = f"{float(z_lookup_val):.1f}" 
                 
+                # Find the actual index label that matches (or is closest to) z_lookup_base_str
+                # The index labels are already strings like "-3.4", "-3.3" etc.
+                actual_row_labels_float = [float(label) for label in data.index]
+                # Find the row label that is numerically closest to our target base z-score
+                closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - float(z_lookup_base_str)))
+                closest_row_label_str = f"{closest_row_float_val:.1f}" # Convert back to string format of index
+
                 # Find closest column (second decimal)
-                # Calculate the second decimal part for the lookup value
-                z_lookup_second_decimal_target = round(z_lookup_val - float(z_lookup_base_str), 2)
-
-                # Find the column header string that is closest to this second decimal
-                closest_col_label_str = min(data.columns, key=lambda c_label: abs(float(c_label) - z_lookup_second_decimal_target))
-
-                # Highlight row
-                if z_lookup_base_str in data.index:
-                    style.loc[z_lookup_base_str, :] = 'background-color: lightblue;'
+                z_lookup_second_decimal_target = round(z_lookup_val - float(closest_row_label_str), 2)
                 
-                # Highlight column
-                if closest_col_label_str in data.columns:
-                    for r_idx in data.index:
-                        current_r_style = style.loc[r_idx, closest_col_label_str]
-                        style.loc[r_idx, closest_col_label_str] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
-                
-                # Highlight specific cell
-                if z_lookup_base_str in data.index and closest_col_label_str in data.columns:
-                    current_c_style = style.loc[z_lookup_base_str, closest_col_label_str]
-                    style.loc[z_lookup_base_str, closest_col_label_str] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red;'
+                actual_col_labels_float = [float(col_str) for col_str in data.columns]
+                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_lookup_second_decimal_target))
+                closest_col_label_str = f"{closest_col_float_val:.2f}" # Convert back to string format of columns
 
-            except Exception as e:
-                # st.error(f"Error in z-table styling: {e}") # Optional: for debugging
+
+                # 1. Apply row highlight
+                if closest_row_label_str in style_df.index:
+                    style_df.loc[closest_row_label_str, :] = 'background-color: lightblue;'
+                
+                # 2. Apply column highlight
+                if closest_col_label_str in style_df.columns:
+                    style_df.loc[:, closest_col_label_str] += 'background-color: lightgreen;' # Append to allow combined bg color
+                
+                # 3. Apply specific cell highlight (this will override/append)
+                if closest_row_label_str in style_df.index and closest_col_label_str in style_df.columns:
+                    style_df.loc[closest_row_label_str, closest_col_label_str] = 'background-color: yellow; font-weight: bold; border: 2px solid red;'
+            
+            except Exception: # General exception catch for safety during styling
                 pass 
-            return style
+            return style_df
         
         st.markdown(df_z_lookup_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                                {'selector': 'td', 'props': [('text-align', 'center')]}])
@@ -834,8 +837,7 @@ def tab_mann_whitney_u():
                 z_calc_mw = (u_stat_mw + 0.5 - mu_u) / sigma_u
             elif u_stat_mw > mu_u:
                 z_calc_mw = (u_stat_mw - 0.5 - mu_u) / sigma_u
-            # else z_calc_mw remains 0.0 if u_stat_mw == mu_u
-        elif n1_mw > 0 and n2_mw > 0: # Only warn if sample sizes suggest sigma_u should be > 0
+        elif n1_mw > 0 and n2_mw > 0: 
             st.warning("Standard deviation (σ_U) is zero or invalid. Check sample sizes. z_calc set to 0.")
 
 
@@ -954,8 +956,6 @@ def tab_mann_whitney_u():
 # --- Wilcoxon Signed-Rank T Test ---
 def tab_wilcoxon_t():
     st.header("Wilcoxon Signed-Rank T Test (Normal Approximation)")
-    # ... (Implementation will be very similar to Mann-Whitney U, using its own formulas for mu_T and sigma_T)
-    # ... (It will also use a z-critical value table for approximation)
     col1, col2 = st.columns([2, 1.5])
 
     with col1:
@@ -982,16 +982,45 @@ def tab_wilcoxon_t():
         st.markdown(f"**Normal Approximation Parameters:** μ<sub>T</sub> = {mu_t_w:.2f}, σ<sub>T</sub> = {sigma_t_w:.2f}")
         st.markdown(f"**Calculated z-statistic (from T, with continuity correction):** {z_calc_w:.3f}")
         
-        # Plotting (similar to Mann-Whitney U)
         st.subheader("Standard Normal Distribution Plot (for z_calc)")
         fig_w, ax_w = plt.subplots(figsize=(8,5))
-        # ... (plotting logic for z_calc_w and critical regions based on alpha_w and tail_w)
         plot_min_z_w = min(stats.norm.ppf(0.0001), z_calc_w - 2, -4.0)
         plot_max_z_w = max(stats.norm.ppf(0.9999), z_calc_w + 2, 4.0)
+        if abs(z_calc_w) > 4 and abs(z_calc_w) > plot_max_z_w * 0.8:
+             plot_min_z_w = min(plot_min_z_w, z_calc_w -1)
+             plot_max_z_w = max(plot_max_z_w, z_calc_w +1)
+
         x_norm_w = np.linspace(plot_min_z_w, plot_max_z_w, 500)
         y_norm_w = stats.norm.pdf(x_norm_w)
         ax_w.plot(x_norm_w, y_norm_w, 'b-', lw=2, label='Standard Normal Distribution')
+        
+        crit_z_upper_w_plot, crit_z_lower_w_plot = None, None
+        if tail_w == "Two-tailed":
+            crit_z_upper_w_plot = stats.norm.ppf(1 - alpha_w / 2)
+            crit_z_lower_w_plot = stats.norm.ppf(alpha_w / 2)
+            if crit_z_upper_w_plot is not None and not np.isnan(crit_z_upper_w_plot):
+                x_fill_upper = np.linspace(crit_z_upper_w_plot, plot_max_z_w, 100)
+                ax_w.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, label=f'α/2 = {alpha_w/2:.4f}')
+                ax_w.axvline(crit_z_upper_w_plot, color='red', linestyle='--', lw=1)
+            if crit_z_lower_w_plot is not None and not np.isnan(crit_z_lower_w_plot):
+                x_fill_lower = np.linspace(plot_min_z_w, crit_z_lower_w_plot, 100)
+                ax_w.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5)
+                ax_w.axvline(crit_z_lower_w_plot, color='red', linestyle='--', lw=1)
+        elif tail_w == "One-tailed (right)": 
+            crit_z_upper_w_plot = stats.norm.ppf(1 - alpha_w)
+            if crit_z_upper_w_plot is not None and not np.isnan(crit_z_upper_w_plot):
+                x_fill_upper = np.linspace(crit_z_upper_w_plot, plot_max_z_w, 100)
+                ax_w.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, label=f'α = {alpha_w:.4f}')
+                ax_w.axvline(crit_z_upper_w_plot, color='red', linestyle='--', lw=1)
+        else: 
+            crit_z_lower_w_plot = stats.norm.ppf(alpha_w)
+            if crit_z_lower_w_plot is not None and not np.isnan(crit_z_lower_w_plot):
+                x_fill_lower = np.linspace(plot_min_z_w, crit_z_lower_w_plot, 100)
+                ax_w.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5, label=f'α = {alpha_w:.4f}')
+                ax_w.axvline(crit_z_lower_w_plot, color='red', linestyle='--', lw=1)
+
         ax_w.axvline(z_calc_w, color='green', linestyle='-', lw=2, label=f'z_calc = {z_calc_w:.3f}')
+        ax_w.set_title('Normal Approx. for Wilcoxon T: Critical z Region(s)')
         ax_w.legend(); ax_w.grid(True); st.pyplot(fig_w)
 
 
@@ -1002,7 +1031,7 @@ def tab_wilcoxon_t():
             z_crit_table_rows_w[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
         df_z_crit_table_w = pd.DataFrame(z_crit_table_rows_w).set_index('Distribution')
         
-        def style_z_crit_table_w(df_to_style): # Similar to Mann-Whitney
+        def style_z_crit_table_w(df_to_style): 
             style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
             target_alpha_for_col = alpha_w
             if tail_w == "Two-tailed": target_alpha_for_col = alpha_w / 2.0
@@ -1031,28 +1060,19 @@ def tab_wilcoxon_t():
         p_val_w_two_tail_on_z = 2 * stats.norm.sf(abs(z_calc_w)) 
         p_val_w_two_tail_on_z = min(p_val_w_two_tail_on_z, 1.0)
 
-        # Get critical z values for summary based on alpha_w and tail_w
-        crit_z_upper_w_summary, crit_z_lower_w_summary = None, None
-        if tail_w == "Two-tailed":
-            crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w / 2)
-        elif tail_w == "One-tailed (right)":
-            crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w)
-        else: # One-tailed (left)
-            crit_z_lower_w_summary = stats.norm.ppf(alpha_w)
-
         crit_val_z_display_w = "N/A"
         if tail_w == "Two-tailed":
-            crit_val_z_display_w = f"±{format_value_for_display(crit_z_upper_w_summary)}" if crit_z_upper_w_summary is not None else "N/A"
+            crit_val_z_display_w = f"±{format_value_for_display(crit_z_upper_w_plot)}" if crit_z_upper_w_plot is not None else "N/A"
             p_val_calc_w = p_val_w_two_tail_on_z
-            decision_crit_w = abs(z_calc_w) > crit_z_upper_w_summary if crit_z_upper_w_summary is not None and not np.isnan(crit_z_upper_w_summary) else False
+            decision_crit_w = abs(z_calc_w) > crit_z_upper_w_plot if crit_z_upper_w_plot is not None and not np.isnan(crit_z_upper_w_plot) else False
         elif tail_w == "One-tailed (right)": 
-            crit_val_z_display_w = format_value_for_display(crit_z_upper_w_summary) if crit_z_upper_w_summary is not None else "N/A"
+            crit_val_z_display_w = format_value_for_display(crit_z_upper_w_plot) if crit_z_upper_w_plot is not None else "N/A"
             p_val_calc_w = p_val_w_one_right_tail_on_z 
-            decision_crit_w = z_calc_w > crit_z_upper_w_summary if crit_z_upper_w_summary is not None and not np.isnan(crit_z_upper_w_summary) else False
+            decision_crit_w = z_calc_w > crit_z_upper_w_plot if crit_z_upper_w_plot is not None and not np.isnan(crit_z_upper_w_plot) else False
         else: 
-            crit_val_z_display_w = format_value_for_display(crit_z_lower_w_summary) if crit_z_lower_w_summary is not None else "N/A"
+            crit_val_z_display_w = format_value_for_display(crit_z_lower_w_plot) if crit_z_lower_w_plot is not None else "N/A"
             p_val_calc_w = p_val_w_one_left_tail_on_z 
-            decision_crit_w = z_calc_w < crit_z_lower_w_summary if crit_z_lower_w_summary is not None and not np.isnan(crit_z_lower_w_summary) else False
+            decision_crit_w = z_calc_w < crit_z_lower_w_plot if crit_z_lower_w_plot is not None and not np.isnan(crit_z_lower_w_plot) else False
         
         comparison_crit_str_w = f"z_calc ({z_calc_w:.3f}) vs z_crit ({crit_val_z_display_w})"
         decision_p_alpha_w = p_val_calc_w < alpha_w
@@ -1073,14 +1093,123 @@ def tab_wilcoxon_t():
 # --- Binomial Test ---
 def tab_binomial_test():
     st.header("Binomial Test Explorer")
-    # ... (Implementation with probability table as before, ensuring formatting and clarity)
-    st.write("Binomial Test implementation is pending.")
+    col1, col2 = st.columns([2, 1.5])
 
-# --- Tukey HSD ---
+    with col1:
+        st.subheader("Inputs")
+        alpha_b = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_b_input")
+        n_b = st.number_input("Number of Trials (n)", 1, 1000, 20, 1, key="n_b_input")
+        p_null_b = st.number_input("Null Hypothesis Probability (p₀)", 0.00, 1.00, 0.5, 0.01, format="%.2f", key="p_null_b_input")
+        k_success_b = st.number_input("Number of Successes (k)", 0, n_b, int(n_b * p_null_b), 1, key="k_success_b_input")
+        
+        tail_options_b = {
+            f"Two-tailed (p ≠ {p_null_b})": "two-sided",
+            f"One-tailed (right, p > {p_null_b})": "greater",
+            f"One-tailed (left, p < {p_null_b})": "less"
+        }
+        tail_b_display = st.radio("Tail Selection (Alternative Hypothesis)", 
+                                  list(tail_options_b.keys()), 
+                                  key="tail_b_display_radio")
+        tail_b_scipy = tail_options_b[tail_b_display]
+
+
+        st.subheader("Binomial Distribution Plot")
+        fig_b, ax_b = plt.subplots(figsize=(8,5))
+        x_b = np.arange(0, n_b + 1)
+        y_b_pmf = stats.binom.pmf(x_b, n_b, p_null_b)
+        ax_b.bar(x_b, y_b_pmf, label=f'Binomial PMF (n={n_b}, p₀={p_null_b})', alpha=0.7, color='skyblue')
+        
+        ax_b.scatter([k_success_b], [stats.binom.pmf(k_success_b, n_b, p_null_b)], color='green', s=100, zorder=5, label=f'Observed k = {k_success_b}')
+        
+        # Illustrative critical region highlighting
+        if tail_b_scipy == "greater": 
+            crit_region_indices = x_b[x_b >= k_success_b]
+            if len(crit_region_indices) > 0 :
+                 ax_b.bar(crit_region_indices, y_b_pmf[crit_region_indices], color='salmon', alpha=0.6, label=f'P(X ≥ {k_success_b})')
+        elif tail_b_scipy == "less": 
+            crit_region_indices = x_b[x_b <= k_success_b]
+            if len(crit_region_indices) > 0:
+                ax_b.bar(crit_region_indices, y_b_pmf[crit_region_indices], color='salmon', alpha=0.6, label=f'P(X ≤ {k_success_b})')
+        # For two-sided, shading is more complex (sum of tails as or more extreme than observed k) - omitted for simplicity of plot
+
+        ax_b.set_title(f'Binomial Distribution (n={n_b}, p₀={p_null_b})')
+        ax_b.set_xlabel('Number of Successes (k)')
+        ax_b.set_ylabel('Probability Mass P(X=k)')
+        ax_b.legend(); ax_b.grid(True); st.pyplot(fig_b)
+
+        st.subheader("Probability Table Snippet")
+        k_start_table = max(0, k_success_b - 3)
+        k_end_table = min(n_b, k_success_b + 3)
+        k_range_table = np.arange(k_start_table, k_end_table + 1)
+        
+        if len(k_range_table) > 0:
+            table_data_b = {
+                "k": k_range_table,
+                "P(X=k)": [format_value_for_display(stats.binom.pmf(k_val, n_b, p_null_b), decimals=4) for k_val in k_range_table],
+                "P(X≤k) (CDF)": [format_value_for_display(stats.binom.cdf(k_val, n_b, p_null_b), decimals=4) for k_val in k_range_table],
+                "P(X≥k)": [format_value_for_display(stats.binom.sf(k_val -1, n_b, p_null_b), decimals=4) for k_val in k_range_table] 
+            }
+            df_table_b = pd.DataFrame(table_data_b)
+            
+            def highlight_k_row_b(row):
+                if int(row["k"]) == k_success_b:
+                    return ['background-color: yellow'] * len(row)
+                return [''] * len(row)
+            st.markdown(df_table_b.style.apply(highlight_k_row_b, axis=1).to_html(), unsafe_allow_html=True)
+            st.caption(f"Table shows probabilities around k={k_success_b}. Highlighted row is your observed k.")
+        else:
+            st.info("Not enough range to display table snippet (e.g., n is very small).")
+        st.markdown("""**Table Interpretation Note:** This table helps understand probabilities around the observed k. Critical regions for binomial tests are based on these cumulative probabilities compared to α.""")
+
+    with col2: # Summary for Binomial Test
+        st.subheader("P-value Calculation Explanation")
+        st.markdown(f"""
+        The p-value for a binomial test is the probability of observing k={k_success_b} successes, or results more extreme, given n={n_b} trials and null probability p₀={p_null_b}.
+        * **Two-tailed (p ≠ {p_null_b})**: Sum of P(X=i) for all i where P(X=i) ≤ P(X={k_success_b}).
+        * **One-tailed (right, p > {p_null_b})**: `P(X ≥ {k_success_b}) = stats.binom.sf({k_success_b}-1, n_b, p_null_b)`
+        * **One-tailed (left, p < {p_null_b})**: `P(X ≤ {k_success_b}) = stats.binom.cdf({k_success_b}, n_b, p_null_b)`
+        """)
+
+        st.subheader("Summary")
+        p_val_b_one_left = stats.binom.cdf(k_success_b, n_b, p_null_b)
+        p_val_b_one_right = stats.binom.sf(k_success_b - 1, n_b, p_null_b) 
+
+        if tail_b_scipy == "two-sided":
+            p_observed_k = stats.binom.pmf(k_success_b, n_b, p_null_b)
+            p_val_calc_b = 0
+            for i in range(n_b + 1):
+                if stats.binom.pmf(i, n_b, p_null_b) <= p_observed_k + 1e-9: # Tolerance
+                    p_val_calc_b += stats.binom.pmf(i, n_b, p_null_b)
+            p_val_calc_b = min(p_val_calc_b, 1.0) 
+        elif tail_b_scipy == "greater":
+            p_val_calc_b = p_val_b_one_right
+        else: 
+            p_val_calc_b = p_val_b_one_left
+        
+        # For binomial, critical value is a k, not a test statistic value directly.
+        crit_val_b_display = "Exact critical k values are complex for binomial; decision based on p-value."
+        decision_p_alpha_b = p_val_calc_b < alpha_b
+        decision_crit_b = decision_p_alpha_b # For discrete, p-value method is primary
+        
+        st.markdown(f"""
+        1.  **Critical Region**: {crit_val_b_display}
+            * *Significance level (α)*: {alpha_b:.4f}
+        2.  **Observed Number of Successes (k)**: {k_success_b}
+            * *Calculated p-value*: {format_value_for_display(p_val_calc_b, decimals=4)} ({apa_p_value(p_val_calc_b)})
+        3.  **Decision (Critical Region Method - based on p-value)**: H₀ is **{'rejected' if decision_crit_b else 'not rejected'}**.
+            * *Reason*: For discrete tests, the p-value method is generally preferred for decision making.
+        4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_b else 'not rejected'}**.
+            * *Reason*: {apa_p_value(p_val_calc_b)} is {'less than' if decision_p_alpha_b else 'not less than'} α ({alpha_b:.4f}).
+        5.  **APA 7 Style Report**:
+            A binomial test was performed to assess whether the proportion of successes (k={k_success_b}, n={n_b}) was different from the null hypothesis proportion of p₀={p_null_b}. The result was {'' if decision_p_alpha_b else 'not '}statistically significant, {apa_p_value(p_val_calc_b)}. The null hypothesis was {'rejected' if decision_p_alpha_b else 'not rejected'} at α = {alpha_b:.2f}.
+        """)
+
+
+# --- Tab 8: Tukey HSD ---
 def tab_tukey_hsd():
     st.header("Tukey HSD (Honestly Significant Difference) Explorer")
-    # ... (Implementation with q-critical value table: df_error rows, k columns for selected alpha)
-    st.write("Tukey HSD implementation is pending.")
+    # ... (Full implementation as per previous correct versions, ensuring table and summary are robust)
+    st.write("Tukey HSD implementation is pending full review and table formatting.")
 
 
 # --- Kruskal-Wallis H Test (Corrected Summary) ---
