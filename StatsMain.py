@@ -5,7 +5,7 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 from io import StringIO # For reading CSV string
 import itertools
-from scipy.special import comb # For Mann-Whitney exact
+# from scipy.special import comb # No longer needed for exact Mann-Whitney
 
 # Helper function to create APA style p-value string
 def apa_p_value(p_val):
@@ -29,140 +29,119 @@ def format_value_for_display(value, decimals=3, default_str="N/A"):
     except (ValueError, TypeError):
         return str(value) if value is not None else default_str
 
-# --- Wilcoxon Exact Critical Value ---
-def wilcoxon_critical_value(n, alpha=0.05, two_tailed=True):
-    if n <= 0 or n > 20: # Practical limit for exact calculation speed
-        # Use normal approximation for larger n
-        mean_T = n * (n + 1) / 4
-        sd_T = np.sqrt(n * (n + 1) * (2 * n + 1) / 24)
-        if sd_T == 0: return None # Avoid division by zero
 
-        alpha_eff = alpha / 2 if two_tailed else alpha
-        # We want T_crit such that P(T <= T_crit) approx alpha_eff
-        # So, z = (T_crit + 0.5 - mean_T) / sd_T. We need z for the lower tail.
-        z_crit_approx = stats.norm.ppf(alpha_eff)
-        # T_crit + 0.5 = mean_T + z_crit_approx * sd_T
-        critical_T_approx = mean_T + z_crit_approx * sd_T - 0.5
-        return int(round(critical_T_approx)) if pd.notna(critical_T_approx) else None
+# Embedded CSV data for Tukey HSD fallback
+TUKEY_CSV_DATA = """df,k,alpha_0.01,alpha_0.05,alpha_0.10
+1,2,90.030,17.970,8.990
+1,3,135.000,26.980,13.480
+1,4,164.300,32.820,16.360
+1,5,185.700,37.080,18.480
+1,6,202.200,40.410,20.150
+2,2,14.000,6.085,3.927
+2,3,19.020,8.331,5.040
+2,4,22.290,9.798,5.757
+2,5,24.720,10.880,6.286
+2,6,26.630,11.740,6.701
+3,2,8.260,4.501,3.182
+3,3,10.620,5.910,3.953
+3,4,12.170,6.825,4.498
+3,5,13.330,7.515,4.903
+3,6,14.240,8.037,5.221
+5,2,5.700,3.639,2.768
+5,3,6.980,4.602,3.401
+5,4,7.800,5.218,3.813
+5,5,8.420,5.673,4.102
+5,6,8.910,6.033,4.328
+5,10,10.850,7.540,5.350
+10,2,4.470,3.151,2.409
+10,3,5.270,3.877,2.913
+10,4,5.830,4.327,3.240
+10,5,6.260,4.654,3.481
+10,6,6.620,4.909,3.671
+10,10,7.940,6.076,4.500
+20,2,3.960,2.950,2.280
+20,3,4.640,3.578,2.722
+20,4,5.060,3.983,3.000
+20,5,5.390,4.295,3.207
+20,6,5.660,4.544,3.372
+20,10,6.770,5.556,4.080
+20,20,8.000,6.800,5.000
+60,2,3.520,2.756,2.116
+60,3,4.100,3.314,2.523
+60,4,4.480,3.631,2.762
+60,5,4.770,3.859,2.933
+60,6,4.990,4.039,3.066
+60,10,5.830,4.823,3.620
+60,20,6.970,5.890,4.400
+120,2,3.360,2.617,2.000
+120,3,3.980,3.356,2.500
+120,4,4.360,3.685,2.750
+120,5,4.650,3.919,2.920
+120,6,4.850,4.103,3.050
+120,10,5.500,4.686,3.450
+120,20,6.800,5.300,3.980
+"""
 
-    # Exact calculation for n <= 20
-    ranks = list(range(1, n + 1))
-    possible_T_plus_sums = {} # Stores sum_of_positive_ranks -> count
+# Function to get Tukey q critical value from CSV
+def get_tukey_q_from_csv(df_error, k, alpha):
+    try:
+        df_tukey = pd.read_csv(StringIO(TUKEY_CSV_DATA))
+    except Exception as e:
+        st.error(f"Error reading embedded Tukey CSV data: {e}")
+        return None
 
-    for i in range(1 << n): # Iterate through all 2^n sign combinations
-        current_T_plus = 0
-        for j in range(n):
-            if (i >> j) & 1: # if j-th bit is set, rank is positive
-                current_T_plus += ranks[j]
-        possible_T_plus_sums[current_T_plus] = possible_T_plus_sums.get(current_T_plus, 0) + 1
+    alpha_col_map = {0.01: 'alpha_0.01', 0.05: 'alpha_0.05', 0.10: 'alpha_0.10'}
+    alpha_lookup_key = alpha
+    if alpha not in alpha_col_map:
+        st.warning(f"Alpha value {alpha:.4f} not directly available in CSV (0.01, 0.05, 0.10). Using alpha=0.05 for CSV lookup if exact alpha column not present.")
+        alpha_lookup_key = 0.05 
     
-    # Convert to distribution of T = min(T+, T-)
-    # T- = n(n+1)/2 - T+
-    max_rank_sum = n * (n + 1) // 2
-    T_distribution = {} # Stores T_value -> probability
-    total_outcomes = 2**n
+    target_col = alpha_col_map.get(alpha_lookup_key, 'alpha_0.05')
 
-    for t_plus, count in possible_T_plus_sums.items():
-        t_minus = max_rank_sum - t_plus
-        t_statistic = min(t_plus, t_minus)
-        T_distribution[t_statistic] = T_distribution.get(t_statistic, 0) + count
-
-    sorted_T_values = sorted(T_distribution.keys())
-    
-    cumulative_prob = 0
-    critical_T = 0 # Smallest possible T is 0
-    
-    alpha_limit = alpha / 2 if two_tailed else alpha
-
-    for t_val in sorted_T_values:
-        prob_t_val = T_distribution[t_val] / total_outcomes
-        cumulative_prob += prob_t_val
-        if cumulative_prob <= alpha_limit:
-            critical_T = t_val 
-        else: # We've just exceeded alpha_limit
-            # The critical T is the largest T whose cumulative prob was <= alpha_limit
-            # If the first T already exceeds, critical T is 0 (or undefined based on table conventions)
-            break 
-            
-    # For "Reject H0 if T_obs <= T_crit", T_crit is the value from the table.
-    # The loop finds the largest T whose P(T_actual <= T) is <= alpha_limit.
-    # This means if our observed T is equal to this critical_T or smaller, it's significant.
-    return critical_T
-
-
-# --- Mann-Whitney U Exact Critical Value ---
-def mann_whitney_critical_value(n1, n2, alpha=0.05, two_tailed=True):
-    N = n1 + n2
-    # Practical limit for exact calculation; beyond this, it's too slow
-    if n1 == 0 or n2 == 0 or N > 20 or (n1 > 10 and n2 > 10): # Adjusted limit
-        mean_U = n1 * n2 / 2
-        sd_U = np.sqrt((n1 * n2 * (N + 1)) / 12)
-        if sd_U == 0: return None
-
-        alpha_eff = alpha / 2 if two_tailed else alpha
-        # We want U_crit such that P(U <= U_crit) approx alpha_eff
-        # z = (U_crit + 0.5 - mean_U) / sd_U (using continuity correction for lower tail)
-        z_crit_approx = stats.norm.ppf(alpha_eff)
-        critical_U_approx = mean_U + z_crit_approx * sd_U - 0.5
-        return int(round(critical_U_approx)) if pd.notna(critical_U_approx) else None
-
-    all_ranks = list(range(1, N + 1))
-    U_values_counts = {}
-    
-    # Iterate through all combinations of choosing n1 ranks for group 1
-    num_combinations = comb(N, n1, exact=True)
-    
-    # If num_combinations is excessively large, fallback or warn, even within N<=20
-    # e.g. n1=10, n2=10 -> N=20, comb(20,10) = 184756 - feasible
-    # e.g. n1=3, n2=17 -> N=20, comb(20,3) = 1140 - feasible
-    if num_combinations > 200000: # Heuristic limit for reasonable speed
-        st.warning(f"Exact Mann-Whitney U calculation for n1={n1}, n2={n2} is computationally intensive ({num_combinations} combinations) and may be slow or incomplete. Normal approximation used instead for critical value.")
-        mean_U = n1 * n2 / 2
-        sd_U = np.sqrt((n1 * n2 * (N + 1)) / 12)
-        if sd_U == 0: return None
-        alpha_eff = alpha / 2 if two_tailed else alpha
-        z_crit_approx = stats.norm.ppf(alpha_eff)
-        critical_U_approx = mean_U + z_crit_approx * sd_U - 0.5
-        return int(round(critical_U_approx)) if pd.notna(critical_U_approx) else None
-
-
-    for ranks_group1 in itertools.combinations(all_ranks, n1):
-        R1 = sum(ranks_group1)
-        U1 = R1 - (n1 * (n1 + 1) / 2)
-        # U2 = n1 * n2 - U1 # Not needed if we use U = min(U1, U2)
-        # Or, the U statistic can be defined as U1 or U2.
-        # For critical value tables, usually the smaller U is used.
-        # Let's use U1 directly and build its distribution.
-        # The distribution of U is symmetric around n1*n2/2.
-        # For simplicity, we'll work with U1 and adjust for tail.
-        # No, the standard U test statistic is min(U1, U2) or U1 if testing specific direction.
-        # Let's calculate U as the smaller of the two possible U values.
-        U_val_for_this_combo = min(U1, n1*n2 - U1)
-
-        U_values_counts[U_val_for_this_combo] = U_values_counts.get(U_val_for_this_combo, 0) + 1
-        
-    sorted_U_values = sorted(U_values_counts.keys())
-    
-    cumulative_prob = 0
-    critical_U = 0 # Smallest possible U is 0
-    
-    alpha_limit = alpha / 2 if two_tailed else alpha
-
-    for u_val in sorted_U_values:
-        prob_u_val = U_values_counts[u_val] / num_combinations
-        cumulative_prob += prob_u_val
-        if cumulative_prob <= alpha_limit:
-            critical_U = u_val
+    df_filtered_k = df_tukey[df_tukey['k'] == k]
+    k_to_use = k
+    if df_filtered_k.empty:
+        available_k = sorted(df_tukey['k'].unique())
+        lower_k_values = [val for val in available_k if val < k]
+        if not lower_k_values: 
+            k_to_use = min(available_k)
+            st.warning(f"k value {k} is smaller than any k in CSV. Using smallest available k={k_to_use}.")
         else:
-            break
-            
-    return critical_U
+            k_to_use = max(lower_k_values)
+            st.warning(f"Exact k={k} not found in CSV. Using nearest lower k={k_to_use}.")
+        df_filtered_k = df_tukey[df_tukey['k'] == k_to_use]
+        if df_filtered_k.empty:
+            st.error(f"Could not find data for k={k_to_use} in CSV after attempting fallback.")
+            return None
+
+    df_filtered_k_sorted = df_filtered_k.sort_values('df')
+    exact_match = df_filtered_k_sorted[df_filtered_k_sorted['df'] == df_error]
+    if not exact_match.empty:
+        val = exact_match.iloc[0][target_col]
+        return float(val) if pd.notna(val) else None
 
 
-# Embedded CSV data for Tukey HSD fallback (already defined above)
+    lower_dfs = df_filtered_k_sorted[df_filtered_k_sorted['df'] < df_error]
+    if not lower_dfs.empty:
+        chosen_row = lower_dfs.iloc[-1]
+        st.warning(f"Exact df={df_error} not found for k={k_to_use} in CSV. Using nearest lower df={chosen_row['df']}.")
+        val = chosen_row[target_col]
+        return float(val) if pd.notna(val) else None
+
+
+    higher_dfs = df_filtered_k_sorted[df_filtered_k_sorted['df'] > df_error]
+    if not higher_dfs.empty:
+        chosen_row = higher_dfs.iloc[0]
+        st.warning(f"Exact df={df_error} not found for k={k_to_use} in CSV, no lower df available. Using nearest higher df={chosen_row['df']}.")
+        val = chosen_row[target_col]
+        return float(val) if pd.notna(val) else None
+
+        
+    st.error(f"Could not find a suitable value in CSV for df={df_error}, k={k_to_use}, alpha={alpha_lookup_key:.4f}.")
+    return None
+
 
 # --- Tab 1: t-distribution ---
-# (Code from previous correct version)
 def tab_t_distribution():
     st.header("t-Distribution Explorer")
     col1, col2 = st.columns([2, 1.5]) 
@@ -441,34 +420,35 @@ def tab_z_distribution():
             try:
                 z_target_for_highlight = test_stat_z_hyp 
                 
-                # Correctly find the closest row label string
-                z_lookup_base_numeric = float(f"{z_target_for_highlight:.1f}") # Truncate/round to one decimal for row
-                
-                # Find the actual index label that is numerically closest
+                # Find closest row label string
+                z_lookup_base_numeric = round(z_target_for_highlight,1) 
+                # Correctly find the string index label
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_lookup_base_numeric))
                 closest_row_label_str = f"{closest_row_float_val:.1f}"
 
-                # Correctly find the closest column label string
+                # Find closest column label string
                 z_lookup_second_decimal_target = round(abs(z_target_for_highlight - closest_row_float_val), 2) # abs for negative z
                 
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
                 closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_lookup_second_decimal_target))
                 closest_col_label_str = f"{closest_col_float_val:.2f}" 
 
-
+                # Apply row highlight
                 if closest_row_label_str in style_df.index:
-                    style_df.loc[closest_row_label_str, :] = 'background-color: lightblue;'
+                    for col_name in style_df.columns: # Iterate through columns to apply to each cell in the row
+                        style_df.loc[closest_row_label_str, col_name] = 'background-color: lightblue;'
                 
+                # Apply column highlight
                 if closest_col_label_str in style_df.columns:
-                    for r_idx in style_df.index: # Apply to all cells in that column
+                    for r_idx in style_df.index: 
                         current_style = style_df.loc[r_idx, closest_col_label_str]
-                        style_df.loc[r_idx, closest_col_label_str] = (current_style + ';' if current_style and not current_style.endswith(';') else current_style) + 'background-color: lightgreen;'
+                        style_df.loc[r_idx, closest_col_label_str] = (current_style + ';' if current_style and not current_style.endswith(';') else '') + 'background-color: lightgreen;'
                 
-                # Specific cell highlight (overrides/appends to row/col highlights)
+                # Apply specific cell highlight (this will override/append to row/col highlights)
                 if closest_row_label_str in style_df.index and closest_col_label_str in style_df.columns:
                     current_cell_style = style_df.loc[closest_row_label_str, closest_col_label_str]
-                    style_df.loc[closest_row_label_str, closest_col_label_str] = (current_cell_style + ';' if current_cell_style and not current_cell_style.endswith(';') else current_cell_style) + 'font-weight: bold; border: 2px solid red; background-color: yellow;' # Cell gets yellow
+                    style_df.loc[closest_row_label_str, closest_col_label_str] = (current_cell_style + ';' if current_cell_style and not current_cell_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
             
             except Exception: 
                 pass 
@@ -841,25 +821,19 @@ def tab_mann_whitney_u():
     with col1:
         st.subheader("Inputs")
         alpha_mw = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_mw_input")
-        n1_mw = st.number_input("Sample Size Group 1 (n1)", 1, 100, 10, 1, key="n1_mw_input") # Max n1 for exact is limited
-        n2_mw = st.number_input("Sample Size Group 2 (n2)", 1, 100, 12, 1, key="n2_mw_input") # Max n2 for exact is limited
+        n1_mw = st.number_input("Sample Size Group 1 (n1)", 1, 100, 10, 1, key="n1_mw_input") 
+        n2_mw = st.number_input("Sample Size Group 2 (n2)", 1, 100, 12, 1, key="n2_mw_input") 
         tail_mw = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_mw_radio")
         u_stat_mw = st.number_input("Calculated U-statistic", value=float(n1_mw*n2_mw/2), format="%.1f", min_value=0.0, max_value=float(n1_mw*n2_mw), key="u_stat_mw_input")
         
         # Conditional logic for exact vs. normal approximation
-        # Practical limit for exact U calculation on-the-fly
-        use_exact_mw_method = (n1_mw + n2_mw <= 20 and n1_mw <=10 and n2_mw <=10) # Adjusted for performance
-        # Fallback to normal if outside this, even if one n is small but sum is large
-        if not use_exact_mw_method and (n1_mw < 10 or n2_mw < 10):
-            st.warning(f"One sample size is small (n1={n1_mw}, n2={n2_mw}), but combined size is too large for quick exact U calculation. Normal approximation will be used. For definitive results, consult specialized U-tables or software with raw data.")
-            use_normal_approx_mw = True
-        elif use_exact_mw_method:
-            st.info("Small sample sizes. Attempting exact critical U value calculation. This might be slow. For definitive results, consult specialized U-tables.")
-            use_normal_approx_mw = False
+        use_normal_approx_mw = not (n1_mw < 10 or n2_mw < 10) # Use normal if both n1 and n2 are >= 10
+        
+        if not use_normal_approx_mw:
+            st.info("Small sample size(s) detected. For definitive results, an exact p-value (from software with raw data or specialized U-tables) is preferred. Critical U values are typically found in these tables.")
+            st.markdown("The plot below shows the normal approximation for illustrative purposes and may be less accurate.")
         else:
             st.info("Using Normal Approximation for Mann-Whitney U test.")
-            use_normal_approx_mw = True
-
 
         # Normal approximation parameters (always calculated for plot and potential use)
         mu_u = (n1_mw * n2_mw) / 2
@@ -872,12 +846,12 @@ def tab_mann_whitney_u():
         elif n1_mw > 0 and n2_mw > 0 : 
             st.warning("Standard deviation (σ_U) for normal approximation is zero. Check sample sizes. z_calc set to 0.")
 
+
         st.markdown(f"**Normal Approx. Parameters:** μ<sub>U</sub> = {mu_u:.2f}, σ<sub>U</sub> = {sigma_u:.2f}")
         st.markdown(f"**z-statistic (from U, for approx.):** {z_calc_mw:.3f}")
 
-        st.subheader("Distribution Plot")
+        st.subheader("Distribution Plot (Normal Approximation)")
         fig_mw, ax_mw = plt.subplots(figsize=(8,5))
-        # Plot is always normal approximation for illustration
         plot_min_z_mw = min(stats.norm.ppf(0.0001), z_calc_mw - 2, -4.0)
         plot_max_z_mw = max(stats.norm.ppf(0.9999), z_calc_mw + 2, 4.0)
         if abs(z_calc_mw) > 4 and abs(z_calc_mw) > plot_max_z_mw * 0.8:
@@ -924,10 +898,8 @@ def tab_mann_whitney_u():
             st.markdown(df_z_crit_table_mw.style.apply(style_z_crit_table_mw, axis=None).to_html(), unsafe_allow_html=True)
             st.caption("Compare your calculated z-statistic to these critical z-values.")
         else: # Exact method guidance
-            st.subheader("Critical U-Value")
-            exact_crit_U = mann_whitney_critical_value(n1_mw, n2_mw, alpha_mw, tail_mw == "Two-tailed")
-            st.markdown(f"Calculated exact critical U-value for n1={n1_mw}, n2={n2_mw}, α={alpha_mw:.3f} ({tail_mw}): **{format_value_for_display(exact_crit_U,0) if exact_crit_U is not None else 'N/A (calc too intensive or error)'}**")
-            st.markdown("For small samples, critical U values are typically obtained from comprehensive statistical tables.")
+            st.subheader("Critical U-Value Table")
+            st.markdown("For small samples, critical U values are found in specialized tables (not dynamically generated here). The decision for this test will be based on the p-value (approximated here).")
 
 
     with col2: 
@@ -935,13 +907,12 @@ def tab_mann_whitney_u():
         p_val_calc_mw = float('nan')
         p_value_method_note = ""
         
-        # P-value is always based on normal approx here due to input limitations for exact from U stat
         if tail_mw == "Two-tailed": p_val_calc_mw = 2 * stats.norm.sf(abs(z_calc_mw))
         elif tail_mw == "One-tailed (right)": p_val_calc_mw = stats.norm.sf(z_calc_mw)
         else:  p_val_calc_mw = stats.norm.cdf(z_calc_mw)
         p_val_calc_mw = min(p_val_calc_mw, 1.0) if not np.isnan(p_val_calc_mw) else float('nan')
         
-        if use_exact_mw_method: # If exact method was attempted for critical value
+        if not use_normal_approx_mw:
             p_value_method_note = "(P-value shown is based on Normal Approximation. For definitive small sample results, an exact p-value from software with raw data or specialized U-tables should be used.)"
         else:
             p_value_method_note = "(P-value based on Normal Approximation)."
@@ -959,44 +930,36 @@ def tab_mann_whitney_u():
         decision_crit_mw = False
         comparison_crit_str_mw = "N/A"
 
-        if use_exact_mw_method:
-            exact_crit_U_summary = mann_whitney_critical_value(n1_mw, n2_mw, alpha_mw, tail_mw == "Two-tailed")
-            crit_val_display_mw = format_value_for_display(exact_crit_U_summary, 0) if exact_crit_U_summary is not None else "N/A (Exact U-table recommended)"
-            if exact_crit_U_summary is not None:
-                # Mann-Whitney: Reject if U_observed <= U_critical (for lower tail U)
-                # Our u_stat_mw is the one calculated by user, typically smaller one.
-                # If one-tailed right, H1: med1 > med2, U would be U2 (or U based on ranks of sample 2).
-                # If one-tailed left, H1: med1 < med2, U would be U1 (or U based on ranks of sample 1).
-                # This is tricky without knowing which U the user calculated.
-                # We assume u_stat_mw is the one to compare against a lower-tail critical value.
-                decision_crit_mw = u_stat_mw <= exact_crit_U_summary
-                comparison_crit_str_mw = f"U_obs ({u_stat_mw:.1f}) {'≤' if decision_crit_mw else '>'} Exact U_crit ({format_value_for_display(exact_crit_U_summary,0)})"
-            else:
-                comparison_crit_str_mw = "Exact U_crit calculation not feasible/available for these Ns."
+        if not use_normal_approx_mw:
+            crit_val_display_mw = "N/A (Use Exact U-Tables)"
+            comparison_crit_str_mw = "Decision should be based on exact U-tables for small samples."
+            # For small samples, decision by critical value is deferred to tables.
+            # Decision by p-value (approximate) is still shown.
         else: # Normal Approximation
-            if tail_mw == "Two-tailed": crit_val_z_display_mw = f"±{format_value_for_display(crit_z_upper_mw_plot)}" if crit_z_upper_mw_plot is not None else "N/A"
-            elif tail_mw == "One-tailed (right)": crit_val_z_display_mw = format_value_for_display(crit_z_upper_mw_plot) if crit_z_upper_mw_plot is not None else "N/A"
-            else: crit_val_z_display_mw = format_value_for_display(crit_z_lower_mw_plot) if crit_z_lower_mw_plot is not None else "N/A"
+            if tail_mw == "Two-tailed": crit_val_display_mw = f"±{format_value_for_display(crit_z_upper_mw_plot)}"
+            elif tail_mw == "One-tailed (right)": crit_val_display_mw = format_value_for_display(crit_z_upper_mw_plot)
+            else: crit_val_display_mw = format_value_for_display(crit_z_lower_mw_plot)
             
-            if crit_z_upper_mw_plot is not None: # Check if normal approx crit vals were computed
+            if crit_z_upper_mw_plot is not None: 
                 if tail_mw == "Two-tailed": decision_crit_mw = abs(z_calc_mw) > crit_z_upper_mw_plot if not np.isnan(crit_z_upper_mw_plot) else False
                 elif tail_mw == "One-tailed (right)": decision_crit_mw = z_calc_mw > crit_z_upper_mw_plot if not np.isnan(crit_z_upper_mw_plot) else False
-                else: decision_crit_mw = z_calc_mw < crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None and not np.isnan(crit_z_lower_mw_plot) else False
-            comparison_crit_str_mw = f"Approx. z_calc ({z_calc_mw:.3f}) vs z_crit ({crit_val_z_display_mw})"
+            if crit_z_lower_mw_plot is not None and tail_mw == "One-tailed (left)":
+                 decision_crit_mw = z_calc_mw < crit_z_lower_mw_plot if not np.isnan(crit_z_lower_mw_plot) else False
+            comparison_crit_str_mw = f"Approx. z_calc ({z_calc_mw:.3f}) vs z_crit ({crit_val_display_mw})"
         
         decision_p_alpha_mw = p_val_calc_mw < alpha_mw if not np.isnan(p_val_calc_mw) else False
         
         st.markdown(f"""
-        1.  **Critical Value ({tail_mw})**: {crit_val_z_display_mw if not use_exact_mw_method else crit_val_display_mw}
+        1.  **Critical Value ({tail_mw})**: {crit_val_display_mw}
             * *Associated p-value (α or α/2 per tail)*: {alpha_mw:.4f}
-        2.  **Calculated U-statistic**: {u_stat_mw:.1f} {'(Approx. z-statistic: ' + f'{z_calc_mw:.3f}' + ')' if not use_exact_mw_method else ''}
+        2.  **Calculated U-statistic**: {u_stat_mw:.1f} {'(Approx. z-statistic: ' + f'{z_calc_mw:.3f}' + ')' if use_normal_approx_mw else ''}
             * *Calculated p-value {p_value_method_note}*: {format_value_for_display(p_val_calc_mw, decimals=4)} ({apa_p_value(p_val_calc_mw)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_mw else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_mw}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_mw else 'not rejected'}**.
             * *Reason*: {apa_p_value(p_val_calc_mw)} is {'less than' if decision_p_alpha_mw else 'not less than'} α ({alpha_mw:.4f}).
         5.  **APA 7 Style Report**:
-            A Mann-Whitney U test indicated that the outcome for group 1 (n<sub>1</sub>={n1_mw}) was {'' if decision_p_alpha_mw else 'not '}statistically significantly different from group 2 (n<sub>2</sub>={n2_mw}), *U* = {u_stat_mw:.1f}, {apa_p_value(p_val_calc_mw)}. {'The normal approximation was used (z = ' + f'{z_calc_mw:.2f}). ' if not use_exact_mw_method else 'For small samples, an exact p-value should be used for definitive results. '}The null hypothesis was {'rejected' if decision_p_alpha_mw else 'not rejected'} at α = {alpha_mw:.2f}.
+            A Mann-Whitney U test indicated that the outcome for group 1 (n<sub>1</sub>={n1_mw}) was {'' if decision_p_alpha_mw else 'not '}statistically significantly different from group 2 (n<sub>2</sub>={n2_mw}), *U* = {u_stat_mw:.1f}, {apa_p_value(p_val_calc_mw)}. {'The normal approximation was used (z = ' + f'{z_calc_mw:.2f}). ' if use_normal_approx_mw else 'For small samples, an exact p-value should be used for definitive results. '}The null hypothesis was {'rejected' if decision_p_alpha_mw else 'not rejected'} at α = {alpha_mw:.2f}.
         """)
 
 # --- Wilcoxon Signed-Rank T Test ---
@@ -1007,16 +970,17 @@ def tab_wilcoxon_t():
     with col1:
         st.subheader("Inputs")
         alpha_w = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_w_input")
-        n_w = st.number_input("Sample Size (n, non-zero differences)", 1, 50, 15, 1, key="n_w_input") # Max n for exact T is usually around 50
+        n_w = st.number_input("Sample Size (n, non-zero differences)", 1, 50, 15, 1, key="n_w_input") 
         tail_w = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_w_radio")
         t_stat_w_input = st.number_input("Calculated T-statistic (sum of ranks)", value=float(n_w*(n_w+1)/4 / 2 if n_w >0 else 0), format="%.1f", min_value=0.0, max_value=float(n_w*(n_w+1)/2 if n_w > 0 else 0), key="t_stat_w_input")
         
-        use_exact_wilcoxon_method = (n_w <= 20) # Threshold for exact method calculation feasibility
-        if use_exact_wilcoxon_method:
-            st.info("Small sample size (n ≤ 20). Attempting exact critical T value calculation. For definitive results, consult specialized T-tables or software with raw data.")
-            st.markdown("The plot below shows the normal approximation for illustrative purposes.")
+        use_normal_approx_wilcoxon = (n_w >= 20)
+        if not use_normal_approx_wilcoxon:
+            st.info("Small sample size (n < 20). For definitive results, an exact p-value (from software with raw data or specialized T-tables) is preferred. Critical T values are typically found in these tables.")
+            st.markdown("The plot below shows the normal approximation for illustrative purposes and may be less accurate.")
         else:
-            st.info("Using Normal Approximation for Wilcoxon Signed-Rank T test (n > 20).")
+            st.info("Using Normal Approximation for Wilcoxon Signed-Rank T test (n ≥ 20).")
+
 
         mu_t_w = n_w * (n_w + 1) / 4
         sigma_t_w_sq = n_w * (n_w + 1) * (2 * n_w + 1) / 24
@@ -1028,7 +992,7 @@ def tab_wilcoxon_t():
                 z_calc_w = (t_stat_w_input + 0.5 - mu_t_w) / sigma_t_w
             elif t_stat_w_input > mu_t_w: 
                 z_calc_w = (t_stat_w_input - 0.5 - mu_t_w) / sigma_t_w
-        elif n_w > 0 and not use_exact_wilcoxon_method: 
+        elif n_w > 0: 
             st.warning("Standard deviation (σ_T) for normal approximation is zero. Check sample size n. z_calc set to 0.")
 
         st.markdown(f"**Normal Approx. Parameters:** μ<sub>T</sub> = {mu_t_w:.2f}, σ<sub>T</sub> = {sigma_t_w:.2f}")
@@ -1038,28 +1002,53 @@ def tab_wilcoxon_t():
         fig_w, ax_w = plt.subplots(figsize=(8,5)); 
         plot_min_z_w = min(stats.norm.ppf(0.0001), z_calc_w - 2, -4.0)
         plot_max_z_w = max(stats.norm.ppf(0.9999), z_calc_w + 2, 4.0)
-        # ... (Rest of plot code as in Mann-Whitney, using z_calc_w and alpha_w) ...
+        if abs(z_calc_w) > 4 and abs(z_calc_w) > plot_max_z_w * 0.8:
+             plot_min_z_w = min(plot_min_z_w, z_calc_w -1)
+             plot_max_z_w = max(plot_max_z_w, z_calc_w +1)
+
         x_norm_w = np.linspace(plot_min_z_w, plot_max_z_w, 500)
         y_norm_w = stats.norm.pdf(x_norm_w)
         ax_w.plot(x_norm_w, y_norm_w, 'b-', lw=2, label='Standard Normal Distribution (Approx.)')
+        
+        crit_z_upper_w_plot, crit_z_lower_w_plot = None, None
+        if tail_w == "Two-tailed": crit_z_upper_w_plot = stats.norm.ppf(1 - alpha_w / 2); crit_z_lower_w_plot = stats.norm.ppf(alpha_w / 2)
+        elif tail_w == "One-tailed (right)": crit_z_upper_w_plot = stats.norm.ppf(1 - alpha_w)
+        else: crit_z_lower_w_plot = stats.norm.ppf(alpha_w)
+
+        if crit_z_upper_w_plot is not None and not np.isnan(crit_z_upper_w_plot):
+            x_fill_upper = np.linspace(crit_z_upper_w_plot, plot_max_z_w, 100)
+            ax_w.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, label=f'Approx. Crit. Region')
+            ax_w.axvline(crit_z_upper_w_plot, color='red', linestyle='--', lw=1)
+        if crit_z_lower_w_plot is not None and not np.isnan(crit_z_lower_w_plot):
+            x_fill_lower = np.linspace(plot_min_z_w, crit_z_lower_w_plot, 100)
+            ax_w.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5, label=f'Approx. Crit. Region' if crit_z_upper_w_plot is None else None)
+            ax_w.axvline(crit_z_lower_w_plot, color='red', linestyle='--', lw=1)
+
         ax_w.axvline(z_calc_w, color='green', linestyle='-', lw=2, label=f'Approx. z_calc = {z_calc_w:.3f}')
-        ax_w.legend(); ax_w.grid(True); st.pyplot(fig_w)
+        ax_w.set_title('Normal Approx. for Wilcoxon T: Critical z Region(s)'); ax_w.legend(); ax_w.grid(True); st.pyplot(fig_w)
 
-
-        if not use_exact_wilcoxon_method:
+        if not use_normal_approx_wilcoxon:
+            st.subheader("Critical T-Value Table")
+            st.markdown("For small samples (n < 20), critical T values are typically obtained from specialized tables. The decision for this test will be based on the p-value (approximated here).")
+        else:
             st.subheader("Critical z-Values (Upper Tail) for Normal Approximation")
-            # ... (Display z-critical value table snippet) ...
             table_alpha_cols_z_crit_w = [0.10, 0.05, 0.025, 0.01, 0.005]
             z_crit_table_rows_w = [{'Distribution': 'z (Standard Normal)'}]
             for alpha_c in table_alpha_cols_z_crit_w:
                 z_crit_table_rows_w[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
             df_z_crit_table_w = pd.DataFrame(z_crit_table_rows_w).set_index('Distribution')
-            st.markdown(df_z_crit_table_w.to_html(), unsafe_allow_html=True)
-        else:
-            st.subheader("Exact Critical T-Value")
-            exact_crit_T = wilcoxon_critical_value(n_w, alpha_w, tail_w == "Two-tailed")
-            st.markdown(f"Calculated exact critical T-value for n={n_w}, α={alpha_w:.3f} ({tail_w}): **{format_value_for_display(exact_crit_T,0) if exact_crit_T is not None else 'N/A (calc too intensive or error)'}**")
-            st.markdown("For small samples, critical T values are typically obtained from comprehensive statistical tables.")
+            
+            def style_z_crit_table_w(df_to_style): 
+                style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+                target_alpha_for_col = alpha_w
+                if tail_w == "Two-tailed": target_alpha_for_col = alpha_w / 2.0
+                closest_alpha_col = min(table_alpha_cols_z_crit_w, key=lambda x: abs(x - target_alpha_for_col))
+                highlight_col = f"α = {closest_alpha_col:.3f}"
+                if highlight_col in df_to_style.columns:
+                    style.loc[:, highlight_col] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+                return style
+            st.markdown(df_z_crit_table_w.style.apply(style_z_crit_table_w, axis=None).to_html(), unsafe_allow_html=True)
+            st.caption("Compare your calculated z-statistic to these critical z-values.")
 
 
     with col2: # Summary for Wilcoxon T
@@ -1067,7 +1056,7 @@ def tab_wilcoxon_t():
         p_val_calc_w = float('nan')
         p_value_method_note_w = ""
         
-        if use_exact_wilcoxon_method:
+        if not use_normal_approx_wilcoxon:
              p_value_method_note_w = "(P-value shown is based on Normal Approximation. For definitive small sample results, an exact p-value from software with raw data or specialized T-tables should be used.)"
         else:
             p_value_method_note_w = "(P-value based on Normal Approximation)."
@@ -1078,7 +1067,7 @@ def tab_wilcoxon_t():
         p_val_calc_w = min(p_val_calc_w, 1.0) if not np.isnan(p_val_calc_w) else float('nan')
 
         st.markdown(f"""
-        The T statistic ({t_stat_w_input:.1f}) is {'approximated by' if use_exact_wilcoxon_method else 'converted to'} z ({z_calc_w:.3f}) using μ<sub>T</sub>={mu_t_w:.2f}, σ<sub>T</sub>={sigma_t_w:.2f} (with continuity correction). P-value from normal distribution. {p_value_method_note_w}
+        The T statistic ({t_stat_w_input:.1f}) is {'approximated by' if not use_normal_approx_wilcoxon else 'converted to'} z ({z_calc_w:.3f}) using μ<sub>T</sub>={mu_t_w:.2f}, σ<sub>T</sub>={sigma_t_w:.2f} (with continuity correction). P-value from normal distribution. {p_value_method_note_w}
         * **Two-tailed**: `2 * P(Z ≥ |{z_calc_w:.3f}|)` 
         * **One-tailed (right)**: `P(Z ≥ {z_calc_w:.3f})` 
         * **One-tailed (left)**: `P(Z ≤ {z_calc_w:.3f})` 
@@ -1088,30 +1077,19 @@ def tab_wilcoxon_t():
         crit_val_display_w = "N/A"
         decision_crit_w = False
         
-        if use_exact_wilcoxon_method:
-            exact_crit_T_summary = wilcoxon_critical_value(n_w, alpha_w, tail_w == "Two-tailed")
-            crit_val_display_w = format_value_for_display(exact_crit_T_summary, 0) if exact_crit_T_summary is not None else "N/A (Exact T-table recommended)"
-            if exact_crit_T_summary is not None:
-                # Wilcoxon: Reject if T_observed <= T_critical
-                decision_crit_w = t_stat_w_input <= exact_crit_T_summary
-                comparison_crit_str_w = f"T_obs ({t_stat_w_input:.1f}) {'≤' if decision_crit_w else '>'} Exact T_crit ({format_value_for_display(exact_crit_T_summary,0)})"
-            else:
-                comparison_crit_str_w = "Exact T_crit calculation not feasible/available for this n."
+        if not use_normal_approx_wilcoxon:
+            crit_val_display_w = "N/A (Use Exact T-Tables)"
+            comparison_crit_str_w = "Decision should be based on exact T-tables for small samples."
         else: # Normal Approximation
-            crit_z_upper_w_summary, crit_z_lower_w_summary = None, None
-            if tail_w == "Two-tailed": crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w / 2)
-            elif tail_w == "One-tailed (right)": crit_z_upper_w_summary = stats.norm.ppf(1 - alpha_w)
-            else: crit_z_lower_w_summary = stats.norm.ppf(alpha_w)
-
-            if tail_w == "Two-tailed": crit_val_display_w = f"±{format_value_for_display(crit_z_upper_w_summary)}"
-            elif tail_w == "One-tailed (right)": crit_val_display_w = format_value_for_display(crit_z_upper_w_summary)
-            else: crit_val_display_w = format_value_for_display(crit_z_lower_w_summary)
+            if tail_w == "Two-tailed": crit_val_display_w = f"±{format_value_for_display(crit_z_upper_w_plot)}"
+            elif tail_w == "One-tailed (right)": crit_val_display_w = format_value_for_display(crit_z_upper_w_plot)
+            else: crit_val_display_w = format_value_for_display(crit_z_lower_w_plot)
             
-            if crit_z_upper_w_summary is not None:
-                 if tail_w == "Two-tailed": decision_crit_w = abs(z_calc_w) > crit_z_upper_w_summary if not np.isnan(crit_z_upper_w_summary) else False
-                 elif tail_w == "One-tailed (right)": decision_crit_w = z_calc_w > crit_z_upper_w_summary if not np.isnan(crit_z_upper_w_summary) else False
-            if crit_z_lower_w_summary is not None and tail_w == "One-tailed (left)":
-                 decision_crit_w = z_calc_w < crit_z_lower_w_summary if not np.isnan(crit_z_lower_w_summary) else False
+            if crit_z_upper_w_plot is not None:
+                 if tail_w == "Two-tailed": decision_crit_w = abs(z_calc_w) > crit_z_upper_w_plot if not np.isnan(crit_z_upper_w_plot) else False
+                 elif tail_w == "One-tailed (right)": decision_crit_w = z_calc_w > crit_z_upper_w_plot if not np.isnan(crit_z_upper_w_plot) else False
+            if crit_z_lower_w_plot is not None and tail_w == "One-tailed (left)":
+                 decision_crit_w = z_calc_w < crit_z_lower_w_plot if not np.isnan(crit_z_lower_w_plot) else False
             comparison_crit_str_w = f"Approx. z_calc ({z_calc_w:.3f}) vs z_crit ({crit_val_display_w})"
         
         decision_p_alpha_w = p_val_calc_w < alpha_w if not np.isnan(p_val_calc_w) else False
@@ -1119,14 +1097,14 @@ def tab_wilcoxon_t():
         st.markdown(f"""
         1.  **Critical Value ({tail_w})**: {crit_val_display_w}
             * *Associated p-value (α or α/2 per tail)*: {alpha_w:.4f}
-        2.  **Calculated T-statistic**: {t_stat_w_input:.1f} {'(Approx. z-statistic: ' + f'{z_calc_w:.3f}' + ')' if not use_exact_wilcoxon_method else ''}
+        2.  **Calculated T-statistic**: {t_stat_w_input:.1f} {'(Approx. z-statistic: ' + f'{z_calc_w:.3f}' + ')' if use_normal_approx_wilcoxon else ''}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_w, decimals=4)} ({apa_p_value(p_val_calc_w)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_w else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_w}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_w else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.4f}). {p_value_method_note_w if use_exact_wilcoxon_method else ""}
+            * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.4f}). {p_value_method_note_w if not use_normal_approx_wilcoxon else ""}
         5.  **APA 7 Style Report**:
-            A Wilcoxon signed-rank test indicated that the median difference was {'' if decision_p_alpha_w else 'not '}statistically significant, *T* = {t_stat_w_input:.1f}, {apa_p_value(p_val_calc_w)}. {'The normal approximation was used (z = ' + f'{z_calc_w:.2f}). ' if not use_exact_wilcoxon_method else 'For small samples, an exact p-value should be used for definitive results. '}The null hypothesis was {'rejected' if decision_p_alpha_w else 'not rejected'} at α = {alpha_w:.2f} (n={n_w}).
+            A Wilcoxon signed-rank test indicated that the median difference was {'' if decision_p_alpha_w else 'not '}statistically significant, *T* = {t_stat_w_input:.1f}, {apa_p_value(p_val_calc_w)}. {'The normal approximation was used (z = ' + f'{z_calc_w:.2f}). ' if use_normal_approx_wilcoxon else 'For small samples, an exact p-value should be used for definitive results. '}The null hypothesis was {'rejected' if decision_p_alpha_w else 'not rejected'} at α = {alpha_w:.2f} (n={n_w}).
         """)
 
 # --- Binomial Test ---
