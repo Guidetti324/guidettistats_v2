@@ -419,8 +419,11 @@ def tab_z_distribution():
                 z_target_for_highlight = test_stat_z_hyp 
                 
                 z_lookup_base_numeric = round(z_target_for_highlight,1) 
-                # Corrected logic to find closest row label string
-                closest_row_label_str = min(data.index, key=lambda x_label: abs(float(x_label) - z_lookup_base_numeric))
+                closest_row_label_str = f"{z_lookup_base_numeric:.1f}"
+                if closest_row_label_str not in data.index: # Find nearest if exact not in index
+                    actual_row_labels_float = [float(label) for label in data.index]
+                    closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_lookup_base_numeric))
+                    closest_row_label_str = f"{closest_row_float_val:.1f}"
 
 
                 z_lookup_second_decimal_target = round(abs(z_target_for_highlight - float(closest_row_label_str)), 2) # abs for negative z
@@ -498,6 +501,7 @@ def tab_z_distribution():
 
 
 # --- Tab 3: F-distribution ---
+# (Code from previous correct version, assumed to be working)
 def tab_f_distribution():
     st.header("F-Distribution Explorer")
     col1, col2 = st.columns([2, 1.5])
@@ -821,7 +825,7 @@ def tab_mann_whitney_u():
         use_exact_mw = (n1_mw < 10 or n2_mw < 10) 
         if use_exact_mw:
             st.info("Small sample size(s) detected. For definitive results, an exact p-value (from software with raw data or specialized U-tables) is preferred. Critical U values are typically found in these tables.")
-            st.markdown("The plot and p-value below use the normal approximation for illustrative purposes and may be less accurate.")
+            st.markdown("The plot below shows the normal approximation for illustrative purposes and may be less accurate.")
         else:
             st.info("Using Normal Approximation for Mann-Whitney U test.")
 
@@ -896,7 +900,6 @@ def tab_mann_whitney_u():
         p_val_calc_mw = float('nan')
         p_value_method_note = ""
         
-        # P-value calculation (always normal approx from U-stat here)
         if tail_mw == "Two-tailed": p_val_calc_mw = 2 * stats.norm.sf(abs(z_calc_mw))
         elif tail_mw == "One-tailed (right)": p_val_calc_mw = stats.norm.sf(z_calc_mw)
         else:  p_val_calc_mw = stats.norm.cdf(z_calc_mw)
@@ -1018,8 +1021,18 @@ def tab_wilcoxon_t():
             for alpha_c in table_alpha_cols_z_crit_w:
                 z_crit_table_rows_w[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
             df_z_crit_table_w = pd.DataFrame(z_crit_table_rows_w).set_index('Distribution')
-            # ... (Styling for z_crit_table_w) ...
-            st.markdown(df_z_crit_table_w.to_html(), unsafe_allow_html=True)
+            
+            def style_z_crit_table_w(df_to_style): 
+                style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+                target_alpha_for_col = alpha_w
+                if tail_w == "Two-tailed": target_alpha_for_col = alpha_w / 2.0
+                closest_alpha_col = min(table_alpha_cols_z_crit_w, key=lambda x: abs(x - target_alpha_for_col))
+                highlight_col = f"α = {closest_alpha_col:.3f}"
+                if highlight_col in df_to_style.columns:
+                    style.loc[:, highlight_col] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
+                return style
+            st.markdown(df_z_crit_table_w.style.apply(style_z_crit_table_w, axis=None).to_html(), unsafe_allow_html=True)
+            st.caption("Compare your calculated z-statistic to these critical z-values.")
 
 
     with col2: # Summary for Wilcoxon T
@@ -1067,8 +1080,8 @@ def tab_wilcoxon_t():
             * *Calculated p-value*: {format_value_for_display(p_val_calc_w, decimals=4)} ({apa_p_value(p_val_calc_w)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_w else 'not rejected'}** {'(based on normal approx.)' if not use_exact_wilcoxon else '(use exact T-table for definitive decision)'}.
             * *Reason*: {comparison_crit_str_w}.
-        4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_w else 'not rejected'}** {'(p-value from normal approx.)' if use_exact_wilcoxon else ''}.
-            * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.4f}).
+        4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_w else 'not rejected'}**.
+            * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.4f}). {p_value_method_note_w if use_exact_wilcoxon else ""}
         5.  **APA 7 Style Report**:
             A Wilcoxon signed-rank test indicated that the median difference was {'' if decision_p_alpha_w else 'not '}statistically significant, *T* = {t_stat_w_input:.1f}, {apa_p_value(p_val_calc_w)}. {'The normal approximation was used, yielding *z* = ' + f'{z_calc_w:.2f}. ' if not use_exact_wilcoxon else 'For small samples, an exact p-value should be used for definitive results. '}The null hypothesis was {'rejected' if decision_p_alpha_w else 'not rejected'} at α = {alpha_w:.2f} (n={n_w}).
         """)
