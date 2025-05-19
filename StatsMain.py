@@ -423,17 +423,22 @@ def tab_z_distribution():
                 z_target = test_stat_z_hyp 
                 
                 # Determine closest row label string
-                z_target_base_numeric = np.trunc(z_target * 10) / 10.0 
+                # Correctly round z_target to one decimal place for row lookup
+                z_target_base_numeric = round(z_target * 10) / 10.0 
                 
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
                 # Determine closest column label string
-                z_target_second_decimal = round(abs(z_target - closest_row_float_val), 2) 
-                
+                # The second decimal for the target z
+                z_target_second_decimal_part = round(z_target - closest_row_float_val, 2)
+                # Ensure it's positive and within 0.00 to 0.09 range for column lookup
+                z_target_second_decimal_for_col = round(abs(z_target_second_decimal_part),2)
+
+
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
-                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_target_second_decimal))
+                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_target_second_decimal_for_col))
                 highlight_col_label = f"{closest_col_float_val:.2f}"
 
 
@@ -1270,7 +1275,7 @@ def tab_tukey_hsd():
 
     with col2: # Summary for Tukey HSD
         st.subheader("P-value Calculation Explanation")
-        p_val_calc_tukey_num = float('nan') # Initialize to NaN
+        p_val_calc_tukey_num = float('nan') # CORRECT INITIALIZATION
         p_val_source = "Not calculated"
         try:
             from statsmodels.stats.libqsturng import psturng 
