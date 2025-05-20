@@ -48,17 +48,17 @@ def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
         for option in all_df_options:
             if option == 'z (∞)':
                 comparable_options.append(float('inf'))
-            elif isinstance(option, (int, float)) or (isinstance(option, str) and option.replace('.', '', 1).isdigit()):
+            elif isinstance(option, (int, float)) or (isinstance(option, str) and str(option).replace('.', '', 1).replace('-', '', 1).isdigit()): # Allow negative numbers
                 comparable_options.append(float(option))
             else: 
-                comparable_options.append(float('-inf')) 
+                comparable_options.append(float('-inf')) # Should not be reached if all_df_options are well-formed
 
         for i, option_val_numeric in enumerate(comparable_options):
             diff = abs(option_val_numeric - temp_selected_df)
             if diff < min_diff:
                 min_diff = diff
                 closest_idx = i
-            elif diff == min_diff and option_val_numeric == temp_selected_df:
+            elif diff == min_diff and option_val_numeric == temp_selected_df: # Prefer exact match
                 closest_idx = i
         
         if closest_idx == -1: 
@@ -81,7 +81,6 @@ def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
 
 
 # --- Tab 1: t-distribution ---
-# (Code remains the same as the last fully correct version)
 def tab_t_distribution():
     st.header("t-Distribution Explorer")
     col1, col2 = st.columns([2, 1.5]) 
@@ -374,13 +373,11 @@ def tab_z_distribution():
             try:
                 z_target = test_stat_z_hyp 
                 
-                # Determine closest row label string
                 z_target_base_numeric = round(z_target,1) 
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
-                # Determine closest column label string
                 z_target_second_decimal_part = round(abs(z_target - closest_row_float_val), 2) 
                 
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
@@ -698,10 +695,10 @@ def tab_chi_square_distribution():
             if highlight_col_name in df_to_style.columns:
                 for r_idx in df_to_style.index:
                      current_r_style = style.loc[r_idx, highlight_col_name]
-                     style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
+                     style.loc[r_idx, highlight_col_name] = (current_r_style + ';' if current_r_style and not current_r_style.endswith(';') else current_r_style) + 'background-color: lightgreen;'
                 if selected_df_str in df_to_style.index:
                     current_c_style = style.loc[selected_df_str, highlight_col_name]
-                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
+                    style.loc[selected_df_str, highlight_col_name] = (current_c_style + ';' if current_c_style and not current_c_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
         
         st.markdown(df_chi2_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
@@ -1129,6 +1126,18 @@ def tab_tukey_hsd():
     st.header("Tukey HSD (Honestly Significant Difference) Explorer")
     col1, col2 = st.columns([2, 1.5])
     
+    # Attempt to import statsmodels functions
+    qsturng_func = None
+    psturng_func = None
+    statsmodels_available = False
+    try:
+        from statsmodels.stats.libqsturng import qsturng, psturng
+        qsturng_func = qsturng
+        psturng_func = psturng
+        statsmodels_available = True
+    except ImportError:
+        st.error("`statsmodels` library is not installed or not found. Tukey HSD calculations cannot be performed. Please ensure `statsmodels` is in your `requirements.txt`.")
+
     with col1:
         st.subheader("Inputs")
         alpha_tukey = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_tukey_hsd_input")
@@ -1143,21 +1152,18 @@ def tab_tukey_hsd():
         st.subheader("Studentized Range q Distribution (Conceptual Plot)")
         st.markdown("The Tukey HSD test uses the studentized range q distribution. The plot below is illustrative.")
         
-        q_crit_tukey_plot = float('nan') # Initialize to NaN
-        source_q_crit_plot = "Not calculated"
+        q_crit_tukey_plot = float('nan') 
+        source_q_crit_plot = "Not calculated (statsmodels required)"
         
-        try:
-            from statsmodels.stats.libqsturng import qsturng
-            q_crit_tukey_plot = qsturng(1 - alpha_tukey, k_tukey_selected, df_error_tukey_selected)
-            source_q_crit_plot = "statsmodels"
-            if np.isnan(q_crit_tukey_plot): # If statsmodels returns NaN
-                source_q_crit_plot = "statsmodels (returned NaN)"
-        except ImportError:
-            st.error("`statsmodels` library not found. Tukey HSD calculations cannot be performed. Please install `statsmodels`.")
-            source_q_crit_plot = "statsmodels not available"
-        except Exception as e: 
-            st.warning(f"Error calculating critical q-value with statsmodels: {e}. Value may be N/A.")
-            source_q_crit_plot = "statsmodels (calculation error)"
+        if statsmodels_available and qsturng_func:
+            try:
+                q_crit_tukey_plot = qsturng_func(1 - alpha_tukey, k_tukey_selected, df_error_tukey_selected)
+                source_q_crit_plot = "statsmodels"
+                if np.isnan(q_crit_tukey_plot): 
+                    source_q_crit_plot = "statsmodels (returned NaN)"
+            except Exception as e_qsturng: 
+                st.warning(f"Error calculating critical q-value with statsmodels: {e_qsturng}. Value may be N/A.")
+                source_q_crit_plot = "statsmodels (calculation error)"
         
         fig_tukey, ax_tukey = plt.subplots(figsize=(8,5))
         if not np.isnan(q_crit_tukey_plot):
@@ -1180,7 +1186,7 @@ def tab_tukey_hsd():
                  ax_tukey.text(0.5, 0.6, "Plotting error for conceptual shape.", ha='center')
             ax_tukey.axvline(test_stat_tukey_q, color='green', linestyle='-', lw=2, label=f'Test q = {test_stat_tukey_q:.3f}')
         else:
-            ax_tukey.text(0.5, 0.5, "Critical q not available for plotting (statsmodels issue).", ha='center')
+            ax_tukey.text(0.5, 0.5, "Critical q not available for plotting.", ha='center')
         ax_tukey.set_title(f'Conceptual q-Distribution (α={alpha_tukey:.3f})'); ax_tukey.legend(); ax_tukey.grid(True); st.pyplot(fig_tukey)
         st.info(f"Critical q source for plot: {source_q_crit_plot}")
 
@@ -1189,54 +1195,48 @@ def tab_tukey_hsd():
         table_df_error_window = get_dynamic_df_window(all_df_error_options, df_error_tukey_selected, window_size=5)
 
         tukey_table_data = []
-        for df_err_iter in table_df_error_window:
-            df_err_calc = int(df_err_iter) 
-            row = {'df_error': str(df_err_iter)}
-            for k_val_iter in table_k_cols_display:
-                q_c_val = float('nan')
-                try:
-                    from statsmodels.stats.libqsturng import qsturng
-                    q_c_val = qsturng(1 - alpha_tukey, k_val_iter, df_err_calc)
-                except Exception: # Catch import or calculation error
-                    pass # q_c_val remains NaN
-                row[f"k={k_val_iter}"] = format_value_for_display(q_c_val)
-            tukey_table_data.append(row)
-        df_tukey_table = pd.DataFrame(tukey_table_data).set_index('df_error')
+        if statsmodels_available and qsturng_func:
+            for df_err_iter in table_df_error_window:
+                df_err_calc = int(df_err_iter) 
+                row = {'df_error': str(df_err_iter)}
+                for k_val_iter in table_k_cols_display:
+                    q_c_val = float('nan')
+                    try:
+                        q_c_val = qsturng_func(1 - alpha_tukey, k_val_iter, df_err_calc)
+                    except Exception: pass 
+                    row[f"k={k_val_iter}"] = format_value_for_display(q_c_val)
+                tukey_table_data.append(row)
+            df_tukey_table = pd.DataFrame(tukey_table_data).set_index('df_error')
 
-        def style_tukey_table(df_to_style):
-            style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-            selected_df_err_str = str(df_error_tukey_selected) 
-            
-            if selected_df_err_str in df_to_style.index: 
-                style.loc[selected_df_err_str, :] = 'background-color: lightblue;'
-            
-            closest_k_col_val = min(table_k_cols_display, key=lambda x: abs(x - k_tukey_selected))
-            highlight_col_name = f"k={closest_k_col_val}"
+            def style_tukey_table(df_to_style):
+                style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+                selected_df_err_str = str(df_error_tukey_selected) 
+                
+                if selected_df_err_str in df_to_style.index: 
+                    style.loc[selected_df_err_str, :] = 'background-color: lightblue;'
+                
+                closest_k_col_val = min(table_k_cols_display, key=lambda x: abs(x - k_tukey_selected))
+                highlight_col_name = f"k={closest_k_col_val}"
 
-            if highlight_col_name in df_to_style.columns:
-                for r_idx in df_to_style.index:
-                     current_r_style = style.loc[r_idx, highlight_col_name]
-                     style.loc[r_idx, highlight_col_name] = (current_r_style + ';' if current_r_style and not current_r_style.endswith(';') else current_r_style) + 'background-color: lightgreen;'
-                if selected_df_err_str in df_to_style.index:
-                    current_c_style = style.loc[selected_df_err_str, highlight_col_name]
-                    style.loc[selected_df_err_str, highlight_col_name] = (current_c_style + ';' if current_c_style and not current_c_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
-            return style
+                if highlight_col_name in df_to_style.columns:
+                    for r_idx in df_to_style.index:
+                         current_r_style = style.loc[r_idx, highlight_col_name]
+                         style.loc[r_idx, highlight_col_name] = (current_r_style + ';' if current_r_style and not current_r_style.endswith(';') else current_r_style) + 'background-color: lightgreen;'
+                    if selected_df_err_str in df_to_style.index:
+                        current_c_style = style.loc[selected_df_err_str, highlight_col_name]
+                        style.loc[selected_df_err_str, highlight_col_name] = (current_c_style + ';' if current_c_style and not current_c_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
+                return style
 
-        st.markdown(df_tukey_table.style.apply(style_tukey_table, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption(f"Table shows q-critical values for α={alpha_tukey:.3f}. Highlighted for df_error closest to {df_error_tukey_selected} and k closest to {k_tukey_selected}.")
+            st.markdown(df_tukey_table.style.apply(style_tukey_table, axis=None).to_html(), unsafe_allow_html=True)
+            st.caption(f"Table shows q-critical values for α={alpha_tukey:.3f}. Highlighted for df_error closest to {df_error_tukey_selected} and k closest to {k_tukey_selected}.")
+        else:
+            st.warning("Tukey HSD table cannot be generated because `statsmodels` is not available or qsturng function failed.")
 
 
     with col2: # Summary for Tukey HSD
         st.subheader("P-value Calculation Explanation")
-        p_val_calc_tukey_num = float('nan') # CORRECTED INITIALIZATION
+        p_val_calc_tukey_num = float('nan') 
         p_val_source = "Not calculated"
-        psturng_func = None 
-
-        try:
-            from statsmodels.stats.libqsturng import psturng as psturng_imported
-            psturng_func = psturng_imported 
-        except ImportError:
-            p_val_source = "statsmodels.stats.libqsturng.psturng module/function not found."
         
         if psturng_func: 
             try:
@@ -1247,7 +1247,12 @@ def tab_tukey_hsd():
             except Exception as e_psturng: 
                 p_val_source = f"Error during p-value calculation: {e_psturng}"
                 p_val_calc_tukey_num = float('nan') 
-        
+        elif statsmodels_available: # psturng_func was not assigned due to import error within try
+             p_val_source = "statsmodels.stats.libqsturng.psturng function not found or error during import."
+        else: # statsmodels itself was not available
+            p_val_source = "statsmodels library not available for p-value calculation."
+
+
         st.markdown(f"""
         The p-value for a specific calculated q-statistic ({test_stat_tukey_q:.3f}) from Tukey's HSD is P(Q ≥ {test_stat_tukey_q:.3f}).
         * Source for p-value: {p_val_source}
@@ -1418,7 +1423,7 @@ def tab_kruskal_wallis():
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_kw else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_kw}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_kw else 'not rejected'}**.
-            * *Reason*: {apa_p_val_calc_kw_str} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_kw_str)} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.4f}).
         5.  **APA 7 Style Report**:
             A Kruskal-Wallis H test showed that there was {'' if decision_p_alpha_kw else 'not '}a statistically significant difference in medians between the k={k_groups_kw} groups, {apa_H_stat}, {apa_p_val_calc_kw_str}. The null hypothesis was {'rejected' if decision_p_alpha_kw else 'not rejected'} at α = {alpha_kw:.2f}.
         """)
@@ -1568,7 +1573,7 @@ def main():
     This application provides an interactive way to explore various statistical distributions and tests. 
     Select a tab to begin. On each tab, you can adjust parameters like alpha, degrees of freedom, 
     and input a calculated test statistic to see how it compares to critical values and to understand p-value calculations.
-    Ensure you have `statsmodels` installed for full functionality on the Tukey HSD tab (`pip install statsmodels`).
+    **Ensure you have `statsmodels` installed in your environment for full functionality on the Tukey HSD tab (e.g., by adding `statsmodels` to your `requirements.txt` file).**
     """)
 
     tab_names = [
