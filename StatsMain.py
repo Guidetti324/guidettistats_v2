@@ -373,13 +373,11 @@ def tab_z_distribution():
             try:
                 z_target = test_stat_z_hyp 
                 
-                # Determine closest row label string
                 z_target_base_numeric = round(z_target,1) 
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
-                # Determine closest column label string
                 z_target_second_decimal_part = round(abs(z_target - closest_row_float_val), 2) 
                 
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
@@ -1166,7 +1164,10 @@ def tab_tukey_hsd():
             except Exception as e_qsturng: 
                 st.warning(f"Error calculating critical q-value with statsmodels: {e_qsturng}. Value may be N/A.")
                 source_q_crit_plot = "statsmodels (calculation error)"
-        
+        elif not statsmodels_available:
+             source_q_crit_plot = "statsmodels not available"
+
+
         fig_tukey, ax_tukey = plt.subplots(figsize=(8,5))
         if not np.isnan(q_crit_tukey_plot):
             plot_max_q = max(q_crit_tukey_plot * 1.5, test_stat_tukey_q * 1.5, 5.0)
@@ -1248,7 +1249,7 @@ def tab_tukey_hsd():
                     p_val_calc_tukey_num = max(0, min(p_val_calc_tukey_num, 1.0)) 
                     p_val_source = "statsmodels.stats.libqsturng.psturng"
             except Exception as e_psturng: 
-                p_val_source = f"Error during p-value calculation with psturng: {e_psturng}"
+                p_val_source = f"Error during p-value calculation: {e_psturng}"
                 p_val_calc_tukey_num = float('nan') 
         elif statsmodels_available: 
              p_val_source = "statsmodels.stats.libqsturng.psturng function not found or error during import."
@@ -1277,7 +1278,7 @@ def tab_tukey_hsd():
             reason_p_alpha_tukey_display = f"Because {apa_p_value(p_val_calc_tukey_num)} is {'less than' if decision_p_alpha_tukey else 'not less than'} α ({alpha_tukey:.4f})."
         else: 
             reason_p_alpha_tukey_display = "p-value for q_calc not computed or resulted in error."
-            if decision_crit_tukey and not np.isnan(q_crit_tukey_summary): # Only align if crit value decision was possible
+            if decision_crit_tukey and not np.isnan(q_crit_tukey_summary): 
                  decision_p_alpha_tukey = True 
                  reason_p_alpha_tukey_display += " Decision aligned with critical value method."
             
@@ -1562,7 +1563,7 @@ def tab_friedman_test():
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_fr else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_fr}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_fr else 'not rejected'}**.
-            * *Reason*: {apa_p_val_calc_fr_str} is {'less than' if decision_p_alpha_fr else 'not less than'} α ({alpha_fr:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_fr_str)} is {'less than' if decision_p_alpha_fr else 'not less than'} α ({alpha_fr:.4f}).
         5.  **APA 7 Style Report**:
             A Friedman test indicated that there was {'' if decision_p_alpha_fr else 'not '}a statistically significant difference in medians across the k={k_conditions_fr} conditions for n={n_blocks_fr} blocks, {apa_Q_stat}, {apa_p_val_calc_fr_str}. The null hypothesis was {'rejected' if decision_p_alpha_fr else 'not rejected'} at α = {alpha_fr:.2f}.
         """, unsafe_allow_html=True)
