@@ -1126,6 +1126,7 @@ def tab_tukey_hsd():
     st.header("Tukey HSD (Honestly Significant Difference) Explorer")
     col1, col2 = st.columns([2, 1.5])
     
+    # Attempt to import statsmodels functions
     qsturng_func = None
     psturng_func = None
     statsmodels_available = False
@@ -1237,22 +1238,22 @@ def tab_tukey_hsd():
 
     with col2: # Summary for Tukey HSD
         st.subheader("P-value Calculation Explanation")
-        p_val_calc_tukey_num = float('nan') 
+        p_val_calc_tukey_num = float('nan') # INITIALIZE TO NAN
         p_val_source = "Not calculated"
         
-        if psturng_func: 
+        if psturng_func and statsmodels_available: # Check if function was imported
             try:
                 if test_stat_tukey_q is not None and k_tukey_selected > 0 and df_error_tukey_selected > 0:
                     p_val_calc_tukey_num = 1 - psturng_func(test_stat_tukey_q, float(k_tukey_selected), float(df_error_tukey_selected))
                     p_val_calc_tukey_num = max(0, min(p_val_calc_tukey_num, 1.0)) 
                     p_val_source = "statsmodels.stats.libqsturng.psturng"
             except Exception as e_psturng: 
-                p_val_source = f"Error during p-value calculation: {e_psturng}"
+                p_val_source = f"Error during p-value calculation with statsmodels: {e_psturng}"
                 p_val_calc_tukey_num = float('nan') 
-        elif statsmodels_available: 
-             p_val_source = "statsmodels.stats.libqsturng.psturng function not found or error during import."
-        else: 
+        elif not statsmodels_available: 
             p_val_source = "statsmodels library not available for p-value calculation."
+        else: # statsmodels available but psturng_func is None (should not happen if import was okay)
+             p_val_source = "statsmodels.stats.libqsturng.psturng function could not be used."
 
 
         st.markdown(f"""
@@ -1549,14 +1550,13 @@ def tab_friedman_test():
             if isinstance(p_val_calc_fr_num, (int, float)) and not np.isnan(p_val_calc_fr_num):
                 decision_p_alpha_fr = p_val_calc_fr_num < alpha_fr
         
-        p_val_calc_fr_num_display_str = format_value_for_display(p_val_calc_fr_num, decimals=4)
-        apa_p_val_calc_fr_str = apa_p_value(p_val_calc_fr_num)
+        apa_p_val_calc_fr_str = apa_p_value(p_val_calc_fr_num) # Corrected variable name
 
         st.markdown(f"""
         1.  **Critical χ²-value (df={df_fr})**: {summary_crit_val_chi2_fr_display_str}
             * *Associated p-value (α)*: {alpha_fr:.4f}
         2.  **Calculated Q-statistic (χ²_r)**: {format_value_for_display(test_stat_q_fr)}
-            * *Calculated p-value (from χ² approx.)*: {p_val_calc_fr_num_display_str} ({apa_p_val_calc_fr_str})
+            * *Calculated p-value (from χ² approx.)*: {format_value_for_display(p_val_calc_fr_num, decimals=4)} ({apa_p_val_calc_fr_str})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_fr else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_fr}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_fr else 'not rejected'}**.
