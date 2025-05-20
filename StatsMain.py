@@ -29,117 +29,6 @@ def format_value_for_display(value, decimals=3, default_str="N/A"):
     except (ValueError, TypeError):
         return str(value) if value is not None else default_str
 
-
-# Embedded CSV data for Tukey HSD fallback
-TUKEY_CSV_DATA = """df,k,alpha_0.01,alpha_0.05,alpha_0.10
-1,2,90.030,17.970,8.990
-1,3,135.000,26.980,13.480
-1,4,164.300,32.820,16.360
-1,5,185.700,37.080,18.480
-1,6,202.200,40.410,20.150
-2,2,14.000,6.085,3.927
-2,3,19.020,8.331,5.040
-2,4,22.290,9.798,5.757
-2,5,24.720,10.880,6.286
-2,6,26.630,11.740,6.701
-3,2,8.260,4.501,3.182
-3,3,10.620,5.910,3.953
-3,4,12.170,6.825,4.498
-3,5,13.330,7.515,4.903
-3,6,14.240,8.037,5.221
-5,2,5.700,3.639,2.768
-5,3,6.980,4.602,3.401
-5,4,7.800,5.218,3.813
-5,5,8.420,5.673,4.102
-5,6,8.910,6.033,4.328
-5,10,10.850,7.540,5.350
-10,2,4.470,3.151,2.409
-10,3,5.270,3.877,2.913
-10,4,5.830,4.327,3.240
-10,5,6.260,4.654,3.481
-10,6,6.620,4.909,3.671
-10,10,7.940,6.076,4.500
-20,2,3.960,2.950,2.280
-20,3,4.640,3.578,2.722
-20,4,5.060,3.983,3.000
-20,5,5.390,4.295,3.207
-20,6,5.660,4.544,3.372
-20,10,6.770,5.556,4.080
-20,20,8.000,6.800,5.000
-60,2,3.520,2.756,2.116
-60,3,4.100,3.314,2.523
-60,4,4.480,3.631,2.762
-60,5,4.770,3.859,2.933
-60,6,4.990,4.039,3.066
-60,10,5.830,4.823,3.620
-60,20,6.970,5.890,4.400
-120,2,3.360,2.617,2.000
-120,3,3.980,3.356,2.500
-120,4,4.360,3.685,2.750
-120,5,4.650,3.919,2.920
-120,6,4.850,4.103,3.050
-120,10,5.500,4.686,3.450
-120,20,6.800,5.300,3.980
-"""
-
-# Function to get Tukey q critical value from CSV
-def get_tukey_q_from_csv(df_error, k, alpha):
-    try:
-        df_tukey = pd.read_csv(StringIO(TUKEY_CSV_DATA))
-    except Exception as e:
-        st.error(f"Error reading embedded Tukey CSV data: {e}")
-        return None
-
-    alpha_col_map = {0.01: 'alpha_0.01', 0.05: 'alpha_0.05', 0.10: 'alpha_0.10'}
-    alpha_lookup_key = alpha
-    if alpha not in alpha_col_map:
-        st.warning(f"Alpha value {alpha:.4f} not directly available in CSV (0.01, 0.05, 0.10). Using alpha=0.05 for CSV lookup if exact alpha column not present.")
-        alpha_lookup_key = 0.05 
-    
-    target_col = alpha_col_map.get(alpha_lookup_key, 'alpha_0.05')
-
-    df_filtered_k = df_tukey[df_tukey['k'] == k]
-    k_to_use = k
-    if df_filtered_k.empty:
-        available_k = sorted(df_tukey['k'].unique())
-        lower_k_values = [val for val in available_k if val < k]
-        if not lower_k_values: 
-            k_to_use = min(available_k)
-            st.warning(f"k value {k} is smaller than any k in CSV. Using smallest available k={k_to_use}.")
-        else:
-            k_to_use = max(lower_k_values)
-            st.warning(f"Exact k={k} not found in CSV. Using nearest lower k={k_to_use}.")
-        df_filtered_k = df_tukey[df_tukey['k'] == k_to_use]
-        if df_filtered_k.empty:
-            st.error(f"Could not find data for k={k_to_use} in CSV after attempting fallback.")
-            return None
-
-    df_filtered_k_sorted = df_filtered_k.sort_values('df')
-    exact_match = df_filtered_k_sorted[df_filtered_k_sorted['df'] == df_error]
-    if not exact_match.empty:
-        val = exact_match.iloc[0][target_col]
-        return float(val) if pd.notna(val) else None
-
-
-    lower_dfs = df_filtered_k_sorted[df_filtered_k_sorted['df'] < df_error]
-    if not lower_dfs.empty:
-        chosen_row = lower_dfs.iloc[-1]
-        st.warning(f"Exact df={df_error} not found for k={k_to_use} in CSV. Using nearest lower df={chosen_row['df']}.")
-        val = chosen_row[target_col]
-        return float(val) if pd.notna(val) else None
-
-
-    higher_dfs = df_filtered_k_sorted[df_filtered_k_sorted['df'] > df_error]
-    if not higher_dfs.empty:
-        chosen_row = higher_dfs.iloc[0]
-        st.warning(f"Exact df={df_error} not found for k={k_to_use} in CSV, no lower df available. Using nearest higher df={chosen_row['df']}.")
-        val = chosen_row[target_col]
-        return float(val) if pd.notna(val) else None
-
-        
-    st.error(f"Could not find a suitable value in CSV for df={df_error}, k={k_to_use}, alpha={alpha_lookup_key:.4f}.")
-    return None
-
 def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
     """
     Creates a window of df values around the selected_df_val.
@@ -149,6 +38,7 @@ def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
     Returns a list of df values for the table rows.
     """
     try:
+        # Convert 'z (∞)' to a comparable large number for finding index
         temp_selected_df = float('inf') if selected_df_val == 'z (∞)' else float(selected_df_val)
         
         closest_idx = -1
@@ -191,6 +81,7 @@ def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
 
 
 # --- Tab 1: t-distribution ---
+# (Code remains the same as the last fully correct version)
 def tab_t_distribution():
     st.header("t-Distribution Explorer")
     col1, col2 = st.columns([2, 1.5]) 
@@ -483,11 +374,13 @@ def tab_z_distribution():
             try:
                 z_target = test_stat_z_hyp 
                 
+                # Determine closest row label string
                 z_target_base_numeric = round(z_target,1) 
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
+                # Determine closest column label string
                 z_target_second_decimal_part = round(abs(z_target - closest_row_float_val), 2) 
                 
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
@@ -571,6 +464,7 @@ def tab_f_distribution():
     with col1:
         st.subheader("Inputs")
         alpha_f_input = st.number_input("Alpha (α) for Table/Plot", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_f_input_tab3")
+        
         all_df1_options = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 24, 30, 40, 50, 60, 80, 100, 120, 1000]
         all_df2_options = list(range(1,21)) + [22, 24, 26, 28, 30, 35, 40, 45, 50, 60, 80, 100, 120, 1000] 
 
@@ -1249,19 +1143,24 @@ def tab_tukey_hsd():
         st.subheader("Studentized Range q Distribution (Conceptual Plot)")
         st.markdown("The Tukey HSD test uses the studentized range q distribution. The plot below is illustrative.")
         
-        q_crit_tukey_plot = None
+        q_crit_tukey_plot = float('nan') # Initialize to NaN
         source_q_crit_plot = "Not calculated"
         
         try:
             from statsmodels.stats.libqsturng import qsturng
             q_crit_tukey_plot = qsturng(1 - alpha_tukey, k_tukey_selected, df_error_tukey_selected)
             source_q_crit_plot = "statsmodels"
-        except Exception: 
-            q_crit_tukey_plot = get_tukey_q_from_csv(df_error_tukey_selected, k_tukey_selected, alpha_tukey)
-            source_q_crit_plot = "CSV Fallback" if q_crit_tukey_plot is not None else "Not Found"
+            if np.isnan(q_crit_tukey_plot): # If statsmodels returns NaN
+                source_q_crit_plot = "statsmodels (returned NaN)"
+        except ImportError:
+            st.error("`statsmodels` library not found. Tukey HSD calculations cannot be performed. Please install `statsmodels`.")
+            source_q_crit_plot = "statsmodels not available"
+        except Exception as e: 
+            st.warning(f"Error calculating critical q-value with statsmodels: {e}. Value may be N/A.")
+            source_q_crit_plot = "statsmodels (calculation error)"
         
         fig_tukey, ax_tukey = plt.subplots(figsize=(8,5))
-        if q_crit_tukey_plot is not None and isinstance(q_crit_tukey_plot, (int, float)) and not np.isnan(q_crit_tukey_plot):
+        if not np.isnan(q_crit_tukey_plot):
             plot_max_q = max(q_crit_tukey_plot * 1.5, test_stat_tukey_q * 1.5, 5.0)
             if test_stat_tukey_q > q_crit_tukey_plot * 1.2: plot_max_q = test_stat_tukey_q * 1.2
             
@@ -1281,7 +1180,7 @@ def tab_tukey_hsd():
                  ax_tukey.text(0.5, 0.6, "Plotting error for conceptual shape.", ha='center')
             ax_tukey.axvline(test_stat_tukey_q, color='green', linestyle='-', lw=2, label=f'Test q = {test_stat_tukey_q:.3f}')
         else:
-            ax_tukey.text(0.5, 0.5, "Critical q not available for plotting.", ha='center')
+            ax_tukey.text(0.5, 0.5, "Critical q not available for plotting (statsmodels issue).", ha='center')
         ax_tukey.set_title(f'Conceptual q-Distribution (α={alpha_tukey:.3f})'); ax_tukey.legend(); ax_tukey.grid(True); st.pyplot(fig_tukey)
         st.info(f"Critical q source for plot: {source_q_crit_plot}")
 
@@ -1289,18 +1188,17 @@ def tab_tukey_hsd():
         table_k_cols_display = [2,3,4,5,6,7,8,9,10,12,15,20] 
         table_df_error_window = get_dynamic_df_window(all_df_error_options, df_error_tukey_selected, window_size=5)
 
-
         tukey_table_data = []
         for df_err_iter in table_df_error_window:
             df_err_calc = int(df_err_iter) 
             row = {'df_error': str(df_err_iter)}
             for k_val_iter in table_k_cols_display:
-                q_c_val = None
+                q_c_val = float('nan')
                 try:
                     from statsmodels.stats.libqsturng import qsturng
                     q_c_val = qsturng(1 - alpha_tukey, k_val_iter, df_err_calc)
-                except Exception:
-                    q_c_val = get_tukey_q_from_csv(df_err_calc, k_val_iter, alpha_tukey)
+                except Exception: # Catch import or calculation error
+                    pass # q_c_val remains NaN
                 row[f"k={k_val_iter}"] = format_value_for_display(q_c_val)
             tukey_table_data.append(row)
         df_tukey_table = pd.DataFrame(tukey_table_data).set_index('df_error')
