@@ -373,11 +373,13 @@ def tab_z_distribution():
             try:
                 z_target = test_stat_z_hyp 
                 
+                # Determine closest row label string
                 z_target_base_numeric = round(z_target,1) 
                 actual_row_labels_float = [float(label) for label in data.index]
                 closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
                 highlight_row_label = f"{closest_row_float_val:.1f}"
 
+                # Determine closest column label string
                 z_target_second_decimal_part = round(abs(z_target - closest_row_float_val), 2) 
                 
                 actual_col_labels_float = [float(col_str) for col_str in data.columns]
@@ -1188,7 +1190,8 @@ def tab_tukey_hsd():
         else:
             ax_tukey.text(0.5, 0.5, "Critical q not available for plotting.", ha='center')
         ax_tukey.set_title(f'Conceptual q-Distribution (α={alpha_tukey:.3f})'); ax_tukey.legend(); ax_tukey.grid(True); st.pyplot(fig_tukey)
-        st.info(f"Critical q source for plot: {source_q_crit_plot}")
+        if statsmodels_available:
+            st.info(f"Critical q source for plot: {source_q_crit_plot}")
 
         st.subheader(f"Critical q-Values for α = {alpha_tukey:.3f}")
         table_k_cols_display = [2,3,4,5,6,7,8,9,10,12,15,20] 
@@ -1230,7 +1233,7 @@ def tab_tukey_hsd():
             st.markdown(df_tukey_table.style.apply(style_tukey_table, axis=None).to_html(), unsafe_allow_html=True)
             st.caption(f"Table shows q-critical values for α={alpha_tukey:.3f}. Highlighted for df_error closest to {df_error_tukey_selected} and k closest to {k_tukey_selected}.")
         else:
-            st.warning("Tukey HSD table cannot be generated because `statsmodels` is not available or qsturng function failed.")
+            st.warning("Tukey HSD table cannot be generated because `statsmodels` is not available or its qsturng function failed.")
 
 
     with col2: # Summary for Tukey HSD
@@ -1245,11 +1248,11 @@ def tab_tukey_hsd():
                     p_val_calc_tukey_num = max(0, min(p_val_calc_tukey_num, 1.0)) 
                     p_val_source = "statsmodels.stats.libqsturng.psturng"
             except Exception as e_psturng: 
-                p_val_source = f"Error during p-value calculation: {e_psturng}"
+                p_val_source = f"Error during p-value calculation with psturng: {e_psturng}"
                 p_val_calc_tukey_num = float('nan') 
-        elif statsmodels_available: # psturng_func was not assigned due to import error within try
+        elif statsmodels_available: 
              p_val_source = "statsmodels.stats.libqsturng.psturng function not found or error during import."
-        else: # statsmodels itself was not available
+        else: 
             p_val_source = "statsmodels library not available for p-value calculation."
 
 
@@ -1274,7 +1277,7 @@ def tab_tukey_hsd():
             reason_p_alpha_tukey_display = f"Because {apa_p_value(p_val_calc_tukey_num)} is {'less than' if decision_p_alpha_tukey else 'not less than'} α ({alpha_tukey:.4f})."
         else: 
             reason_p_alpha_tukey_display = "p-value for q_calc not computed or resulted in error."
-            if decision_crit_tukey: 
+            if decision_crit_tukey and not np.isnan(q_crit_tukey_summary): # Only align if crit value decision was possible
                  decision_p_alpha_tukey = True 
                  reason_p_alpha_tukey_display += " Decision aligned with critical value method."
             
@@ -1364,10 +1367,10 @@ def tab_kruskal_wallis():
             if highlight_col_name in df_to_style.columns:
                 for r_idx in df_to_style.index:
                     current_r_style = style.loc[r_idx, highlight_col_name]
-                    style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
+                    style.loc[r_idx, highlight_col_name] = (current_r_style + ';' if current_r_style and not current_r_style.endswith(';') else current_r_style) + 'background-color: lightgreen;'
                 if selected_df_str in df_to_style.index:
                     current_c_style = style.loc[selected_df_str, highlight_col_name]
-                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
+                    style.loc[selected_df_str, highlight_col_name] = (current_c_style + ';' if current_c_style and not current_c_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
         
         if df_kw > 0:
