@@ -1035,20 +1035,20 @@ def tab_binomial_test():
 
         st.subheader("Binomial Distribution Plot")
         fig_b, ax_b = plt.subplots(figsize=(8,5))
-        x_b = np.arange(0, n_b + 1)
-        y_b_pmf = stats.binom.pmf(x_b, n_b, p_null_b)
-        ax_b.bar(x_b, y_b_pmf, label=f'Binomial PMF (n={n_b}, p₀={p_null_b})', alpha=0.7, color='skyblue')
+        x_b_plot = np.arange(0, n_b + 1)
+        y_b_pmf = stats.binom.pmf(x_b_plot, n_b, p_null_b)
+        ax_b.bar(x_b_plot, y_b_pmf, label=f'Binomial PMF (n={n_b}, p₀={p_null_b})', alpha=0.7, color='skyblue')
         
         ax_b.scatter([k_success_b], [stats.binom.pmf(k_success_b, n_b, p_null_b)], color='green', s=100, zorder=5, label=f'Observed k = {k_success_b}')
         
         if tail_b_scipy == "greater": 
-            crit_region_indices = x_b[x_b >= k_success_b]
+            crit_region_indices = x_b_plot[x_b_plot >= k_success_b]
             if len(crit_region_indices) > 0 :
-                 ax_b.bar(crit_region_indices, y_b_pmf[crit_region_indices], color='salmon', alpha=0.6, label=f'P(X ≥ {k_success_b})')
+                 ax_b.bar(crit_region_indices, y_b_pmf[x_b_plot >= k_success_b], color='salmon', alpha=0.6, label=f'P(X ≥ {k_success_b})')
         elif tail_b_scipy == "less": 
-            crit_region_indices = x_b[x_b <= k_success_b]
+            crit_region_indices = x_b_plot[x_b_plot <= k_success_b]
             if len(crit_region_indices) > 0:
-                ax_b.bar(crit_region_indices, y_b_pmf[crit_region_indices], color='salmon', alpha=0.6, label=f'P(X ≤ {k_success_b})')
+                ax_b.bar(crit_region_indices, y_b_pmf[x_b_plot <= k_success_b], color='salmon', alpha=0.6, label=f'P(X ≤ {k_success_b})')
 
         ax_b.set_title(f'Binomial Distribution (n={n_b}, p₀={p_null_b})')
         ax_b.set_xlabel('Number of Successes (k)')
@@ -1126,7 +1126,6 @@ def tab_tukey_hsd():
     st.header("Tukey HSD (Honestly Significant Difference) Explorer")
     col1, col2 = st.columns([2, 1.5])
     
-    # Attempt to import statsmodels functions
     qsturng_func = None
     psturng_func = None
     statsmodels_available = False
@@ -1136,7 +1135,7 @@ def tab_tukey_hsd():
         psturng_func = psturng
         statsmodels_available = True
     except ImportError:
-        st.error("`statsmodels` library is not installed or not found. Tukey HSD calculations cannot be performed. Please ensure `statsmodels` is in your `requirements.txt`.")
+        st.error("`statsmodels` library is not installed or not found. Tukey HSD calculations cannot be performed. Please ensure `statsmodels` is in your `requirements.txt` and that the Streamlit Cloud environment has it installed.")
 
     with col1:
         st.subheader("Inputs")
@@ -1153,7 +1152,7 @@ def tab_tukey_hsd():
         st.markdown("The Tukey HSD test uses the studentized range q distribution. The plot below is illustrative.")
         
         q_crit_tukey_plot = float('nan') 
-        source_q_crit_plot = "Not calculated (statsmodels required)"
+        source_q_crit_plot = "Not calculated"
         
         if statsmodels_available and qsturng_func:
             try:
@@ -1166,8 +1165,7 @@ def tab_tukey_hsd():
                 source_q_crit_plot = "statsmodels (calculation error)"
         elif not statsmodels_available:
              source_q_crit_plot = "statsmodels not available"
-
-
+        
         fig_tukey, ax_tukey = plt.subplots(figsize=(8,5))
         if not np.isnan(q_crit_tukey_plot):
             plot_max_q = max(q_crit_tukey_plot * 1.5, test_stat_tukey_q * 1.5, 5.0)
@@ -1415,19 +1413,18 @@ def tab_kruskal_wallis():
             if isinstance(p_val_calc_kw_num, (int, float)) and not np.isnan(p_val_calc_kw_num):
                 decision_p_alpha_kw = p_val_calc_kw_num < alpha_kw
         
-        p_val_calc_kw_num_display_str = format_value_for_display(p_val_calc_kw_num, decimals=4)
-        apa_p_val_calc_kw_str = apa_p_value(p_val_calc_kw_num)
+        apa_p_val_calc_kw_str = apa_p_value(p_val_calc_kw_num) # Defined here
 
 
         st.markdown(f"""
         1.  **Critical χ²-value (df={df_kw})**: {summary_crit_val_chi2_kw_display_str}
             * *Associated p-value (α)*: {alpha_kw:.4f}
         2.  **Calculated H-statistic**: {format_value_for_display(test_stat_h_kw)}
-            * *Calculated p-value (from χ² approx.)*: {p_val_calc_kw_num_display_str} ({apa_p_val_calc_kw_str})
+            * *Calculated p-value (from χ² approx.)*: {format_value_for_display(p_val_calc_kw_num, decimals=4)} ({apa_p_val_calc_kw_str})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_kw else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_kw}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_kw else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_kw_str)} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.4f}).
+            * *Reason*: {apa_p_val_calc_kw_str} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.4f}).
         5.  **APA 7 Style Report**:
             A Kruskal-Wallis H test showed that there was {'' if decision_p_alpha_kw else 'not '}a statistically significant difference in medians between the k={k_groups_kw} groups, {apa_H_stat}, {apa_p_val_calc_kw_str}. The null hypothesis was {'rejected' if decision_p_alpha_kw else 'not rejected'} at α = {alpha_kw:.2f}.
         """)
@@ -1563,7 +1560,7 @@ def tab_friedman_test():
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_fr else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_fr}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_fr else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_fr_str)} is {'less than' if decision_p_alpha_fr else 'not less than'} α ({alpha_fr:.4f}).
+            * *Reason*: {apa_p_val_calc_fr_str} is {'less than' if decision_p_alpha_fr else 'not less than'} α ({alpha_fr:.4f}).
         5.  **APA 7 Style Report**:
             A Friedman test indicated that there was {'' if decision_p_alpha_fr else 'not '}a statistically significant difference in medians across the k={k_conditions_fr} conditions for n={n_blocks_fr} blocks, {apa_Q_stat}, {apa_p_val_calc_fr_str}. The null hypothesis was {'rejected' if decision_p_alpha_fr else 'not rejected'} at α = {alpha_fr:.2f}.
         """, unsafe_allow_html=True)
