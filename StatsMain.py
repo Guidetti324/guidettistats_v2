@@ -750,7 +750,7 @@ def tab_chi_square_distribution():
         
         st.markdown(f"""
         1.  **Critical Value(s) ({tail_chi2})**: {crit_val_chi2_display_summary}
-            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_chi2_display_summary:.4f}
+            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_display_summary:.4f}
         2.  **Calculated Test Statistic**: {test_stat_chi2:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_chi2_summary, decimals=4)} ({apa_p_value(p_val_calc_chi2_summary)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_chi2_summary else 'not rejected'}**.
@@ -1126,7 +1126,6 @@ def tab_tukey_hsd():
     st.header("Tukey HSD (Honestly Significant Difference) Explorer")
     col1, col2 = st.columns([2, 1.5])
     
-    # Attempt to import statsmodels functions
     qsturng_func = None
     psturng_func = None
     statsmodels_available = False
@@ -1238,10 +1237,10 @@ def tab_tukey_hsd():
 
     with col2: # Summary for Tukey HSD
         st.subheader("P-value Calculation Explanation")
-        p_val_calc_tukey_num = float('nan') # INITIALIZE TO NAN
+        p_val_calc_tukey_num = float('nan') 
         p_val_source = "Not calculated"
         
-        if psturng_func and statsmodels_available: # Check if function was imported
+        if psturng_func and statsmodels_available: 
             try:
                 if test_stat_tukey_q is not None and k_tukey_selected > 0 and df_error_tukey_selected > 0:
                     p_val_calc_tukey_num = 1 - psturng_func(test_stat_tukey_q, float(k_tukey_selected), float(df_error_tukey_selected))
@@ -1252,7 +1251,7 @@ def tab_tukey_hsd():
                 p_val_calc_tukey_num = float('nan') 
         elif not statsmodels_available: 
             p_val_source = "statsmodels library not available for p-value calculation."
-        else: # statsmodels available but psturng_func is None (should not happen if import was okay)
+        else: 
              p_val_source = "statsmodels.stats.libqsturng.psturng function could not be used."
 
 
@@ -1414,7 +1413,7 @@ def tab_kruskal_wallis():
             if isinstance(p_val_calc_kw_num, (int, float)) and not np.isnan(p_val_calc_kw_num):
                 decision_p_alpha_kw = p_val_calc_kw_num < alpha_kw
         
-        apa_p_val_calc_kw_str = apa_p_value(p_val_calc_kw_num) # Defined here
+        apa_p_val_calc_kw_str = apa_p_value(p_val_calc_kw_num) 
 
 
         st.markdown(f"""
@@ -1550,7 +1549,7 @@ def tab_friedman_test():
             if isinstance(p_val_calc_fr_num, (int, float)) and not np.isnan(p_val_calc_fr_num):
                 decision_p_alpha_fr = p_val_calc_fr_num < alpha_fr
         
-        apa_p_val_calc_fr_str = apa_p_value(p_val_calc_fr_num) # Corrected variable name
+        apa_p_val_calc_fr_str = apa_p_value(p_val_calc_fr_num) 
 
         st.markdown(f"""
         1.  **Critical χ²-value (df={df_fr})**: {summary_crit_val_chi2_fr_display_str}
