@@ -731,7 +731,7 @@ def tab_chi_square_distribution():
         p_val_chi2_two_summary = min(p_val_chi2_two_summary, 1.0)
 
         crit_val_chi2_display_summary = "N/A"
-        p_val_for_crit_val_chi2_display_summary = alpha_chi2_input
+        # p_val_for_crit_val_chi2_display_summary = alpha_chi2_input # This variable was causing NameError if not careful with scope
 
         if tail_chi2 == "One-tailed (right)":
             crit_val_chi2_display_summary = format_value_for_display(crit_val_chi2_upper_plot) if crit_val_chi2_upper_plot is not None else "N/A"
@@ -750,7 +750,7 @@ def tab_chi_square_distribution():
         
         st.markdown(f"""
         1.  **Critical Value(s) ({tail_chi2})**: {crit_val_chi2_display_summary}
-            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_display_summary:.4f}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_chi2_input:.4f} 
         2.  **Calculated Test Statistic**: {test_stat_chi2:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_chi2_summary, decimals=4)} ({apa_p_value(p_val_calc_chi2_summary)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_chi2_summary else 'not rejected'}**.
