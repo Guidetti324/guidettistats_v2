@@ -750,7 +750,7 @@ def tab_chi_square_distribution():
         
         st.markdown(f"""
         1.  **Critical Value(s) ({tail_chi2})**: {crit_val_chi2_display_summary}
-            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_display_summary:.4f}
+            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_chi2_display_summary:.4f}
         2.  **Calculated Test Statistic**: {test_stat_chi2:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_chi2_summary, decimals=4)} ({apa_p_value(p_val_calc_chi2_summary)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_chi2_summary else 'not rejected'}**.
@@ -1424,10 +1424,10 @@ def tab_kruskal_wallis():
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_kw else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_kw}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_kw else 'not rejected'}**.
-            * *Reason*: {apa_p_val_calc_kw_str} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.4f}).
+            * *Reason*: {apa_p_val_calc_kw_str} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.4f}). 
         5.  **APA 7 Style Report**:
             A Kruskal-Wallis H test showed that there was {'' if decision_p_alpha_kw else 'not '}a statistically significant difference in medians between the k={k_groups_kw} groups, {apa_H_stat}, {apa_p_val_calc_kw_str}. The null hypothesis was {'rejected' if decision_p_alpha_kw else 'not rejected'} at α = {alpha_kw:.2f}.
-        """)
+        """) # Corrected this line
 
 
 def tab_friedman_test():
