@@ -89,7 +89,7 @@ def tab_t_distribution():
 
     with col1:
         st.subheader("Inputs")
-        alpha_t_input = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_t_input")
+        alpha_t_input = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_t_input")
         
         all_df_values_t = list(range(1, 31)) + [35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 1000, 'z (∞)']
         df_t_selected_display = st.selectbox("Degrees of Freedom (df)", options=all_df_values_t, index=all_df_values_t.index(10), key="df_t_selectbox") 
@@ -116,8 +116,8 @@ def tab_t_distribution():
             crit_func_pdf_plot = lambda x_val: stats.t.pdf(x_val, df_t_calc)
             std_dev_plot = stats.t.std(df_t_calc) if df_t_calc > 0 and not np.isinf(df_t_calc) else 1.0
         
-        plot_min_t = min(crit_func_ppf_plot(0.0001), test_stat_t - 2*std_dev_plot, -4.0)
-        plot_max_t = max(crit_func_ppf_plot(0.9999), test_stat_t + 2*std_dev_plot, 4.0)
+        plot_min_t = min(crit_func_ppf_plot(0.00000001), test_stat_t - 2*std_dev_plot, -4.0) # Adjusted for smaller alpha
+        plot_max_t = max(crit_func_ppf_plot(0.99999999), test_stat_t + 2*std_dev_plot, 4.0) # Adjusted for smaller alpha
         if abs(test_stat_t) > 4 and abs(test_stat_t) > plot_max_t * 0.8 : 
             plot_min_t = min(plot_min_t, test_stat_t -1)
             plot_max_t = max(plot_max_t, test_stat_t +1)
@@ -132,7 +132,7 @@ def tab_t_distribution():
             crit_val_t_lower_plot = crit_func_ppf_plot(alpha_t_input / 2)
             if crit_val_t_upper_plot is not None and not np.isnan(crit_val_t_upper_plot):
                  x_fill_upper = np.linspace(crit_val_t_upper_plot, plot_max_t, 100)
-                 ax_t.fill_between(x_fill_upper, crit_func_pdf_plot(x_fill_upper), color='red', alpha=0.5, label=f'α/2 = {alpha_t_input/2:.4f}')
+                 ax_t.fill_between(x_fill_upper, crit_func_pdf_plot(x_fill_upper), color='red', alpha=0.5, label=f'α/2 = {alpha_t_input/2:.8f}')
                  ax_t.axvline(crit_val_t_upper_plot, color='red', linestyle='--', lw=1)
             if crit_val_t_lower_plot is not None and not np.isnan(crit_val_t_lower_plot):
                  x_fill_lower = np.linspace(plot_min_t, crit_val_t_lower_plot, 100)
@@ -142,13 +142,13 @@ def tab_t_distribution():
             crit_val_t_upper_plot = crit_func_ppf_plot(1 - alpha_t_input)
             if crit_val_t_upper_plot is not None and not np.isnan(crit_val_t_upper_plot):
                 x_fill_upper = np.linspace(crit_val_t_upper_plot, plot_max_t, 100)
-                ax_t.fill_between(x_fill_upper, crit_func_pdf_plot(x_fill_upper), color='red', alpha=0.5, label=f'α = {alpha_t_input:.4f}')
+                ax_t.fill_between(x_fill_upper, crit_func_pdf_plot(x_fill_upper), color='red', alpha=0.5, label=f'α = {alpha_t_input:.8f}')
                 ax_t.axvline(crit_val_t_upper_plot, color='red', linestyle='--', lw=1)
         else: # One-tailed (left)
             crit_val_t_lower_plot = crit_func_ppf_plot(alpha_t_input)
             if crit_val_t_lower_plot is not None and not np.isnan(crit_val_t_lower_plot):
                 x_fill_lower = np.linspace(plot_min_t, crit_val_t_lower_plot, 100)
-                ax_t.fill_between(x_fill_lower, crit_func_pdf_plot(x_fill_lower), color='red', alpha=0.5, label=f'α = {alpha_t_input:.4f}')
+                ax_t.fill_between(x_fill_lower, crit_func_pdf_plot(x_fill_lower), color='red', alpha=0.5, label=f'α = {alpha_t_input:.8f}')
                 ax_t.axvline(crit_val_t_lower_plot, color='red', linestyle='--', lw=1)
 
         ax_t.axvline(test_stat_t, color='green', linestyle='-', lw=2, label=f'Test Stat = {test_stat_t:.3f}')
@@ -162,7 +162,7 @@ def tab_t_distribution():
         st.subheader("Critical t-Values (Upper Tail)")
         
         table_df_window = get_dynamic_df_window(all_df_values_t, df_t_selected_display, window_size=5)
-        table_alpha_cols = [0.10, 0.05, 0.025, 0.01, 0.005] 
+        table_alpha_cols = [0.10, 0.05, 0.025, 0.01, 0.005] # These are standard table columns, user alpha is for highlighting
 
         table_rows = []
         for df_iter_display in table_df_window:
@@ -189,8 +189,9 @@ def tab_t_distribution():
             if tail_t == "Two-tailed":
                 target_alpha_for_col_highlight = alpha_t_input / 2.0
             
+            # Find the closest alpha in table_alpha_cols to the user's (potentially very small) alpha
             closest_alpha_col_val = min(table_alpha_cols, key=lambda x: abs(x - target_alpha_for_col_highlight))
-            highlight_col_name = f"α = {closest_alpha_col_val:.3f}"
+            highlight_col_name = f"α = {closest_alpha_col_val:.3f}" # Use the format of the table column header
 
             if highlight_col_name in df_to_style.columns:
                 for r_idx in df_to_style.index:
@@ -239,8 +240,7 @@ def tab_t_distribution():
         p_val_t_two_summary = min(p_val_t_two_summary, 1.0) 
 
         crit_val_display_summary = "N/A"
-        p_val_for_crit_val_display_summary = alpha_t_input 
-
+        
         if tail_t == "Two-tailed":
             crit_val_display_summary = f"±{format_value_for_display(crit_val_t_upper_plot)}" if crit_val_t_upper_plot is not None else "N/A"
             p_val_calc_summary = p_val_t_two_summary
@@ -264,13 +264,13 @@ def tab_t_distribution():
 
         st.markdown(f"""
         1.  **Critical Value ({tail_t})**: {crit_val_display_summary}
-            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_display_summary:.4f}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_t_input:.8f}
         2.  **Calculated Test Statistic**: {test_stat_t:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_summary, decimals=4)} ({apa_p_value(p_val_calc_summary)})
         3.  **Decision (Critical Value Method)**: The null hypothesis is **{'rejected' if decision_crit_summary else 'not rejected'}**.
             * *Reason*: Because {stat_symbol_summary}(calc) {comparison_crit_str_summary} relative to {stat_symbol_summary}(crit).
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_summary else 'not rejected'}**.
-            * *Reason*: Because {apa_p_value(p_val_calc_summary)} is {'less than' if decision_p_alpha_summary else 'not less than'} α ({alpha_t_input:.4f}).
+            * *Reason*: Because {apa_p_value(p_val_calc_summary)} is {'less than' if decision_p_alpha_summary else 'not less than'} α ({alpha_t_input:.8f}).
         5.  **APA 7 Style Report**:
             *{stat_symbol_summary}*({df_report_str_summary}) = {test_stat_t:.2f}, {apa_p_value(p_val_calc_summary)}. The null hypothesis was {'rejected' if decision_p_alpha_summary else 'not rejected'} at the α = {alpha_t_input:.2f} level.
         """)
@@ -282,7 +282,7 @@ def tab_z_distribution():
 
     with col1:
         st.subheader("Inputs")
-        alpha_z_hyp = st.number_input("Alpha (α) for Hypothesis Test", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_z_hyp_key")
+        alpha_z_hyp = st.number_input("Alpha (α) for Hypothesis Test", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_z_hyp_key")
         tail_z_hyp = st.radio("Tail Selection for Hypothesis Test", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_z_hyp_key")
         test_stat_z_hyp = st.number_input("Your Calculated z-statistic (also for Table Lookup)", value=0.0, format="%.3f", key="test_stat_z_hyp_key", min_value=-3.99, max_value=3.99, step=0.01)
         
@@ -291,8 +291,8 @@ def tab_z_distribution():
         st.subheader("Distribution Plot")
         fig_z, ax_z = plt.subplots(figsize=(8,5))
         
-        plot_min_z = min(stats.norm.ppf(0.00001), test_stat_z_hyp - 2, -4.0) 
-        plot_max_z = max(stats.norm.ppf(0.99999), test_stat_z_hyp + 2, 4.0) 
+        plot_min_z = min(stats.norm.ppf(0.00000001), test_stat_z_hyp - 2, -4.0) 
+        plot_max_z = max(stats.norm.ppf(0.99999999), test_stat_z_hyp + 2, 4.0) 
         if abs(test_stat_z_hyp) > 3.5 : 
             plot_min_z = min(plot_min_z, test_stat_z_hyp - 0.5)
             plot_max_z = max(plot_max_z, test_stat_z_hyp + 0.5)
@@ -413,7 +413,7 @@ def tab_z_distribution():
     with col2: # Summary for Z-distribution hypothesis test
         st.subheader("Hypothesis Test Summary")
         st.markdown(f"""
-        Based on your inputs for hypothesis testing (α = {alpha_z_hyp:.4f}, {tail_z_hyp}):
+        Based on your inputs for hypothesis testing (α = {alpha_z_hyp:.8f}, {tail_z_hyp}):
         """)
         p_val_z_one_right_summary = stats.norm.sf(test_stat_z_hyp)
         p_val_z_one_left_summary = stats.norm.cdf(test_stat_z_hyp)
@@ -421,8 +421,7 @@ def tab_z_distribution():
         p_val_z_two_summary = min(p_val_z_two_summary, 1.0)
 
         crit_val_display_z = "N/A"
-        p_val_for_crit_val_display_z = alpha_z_hyp
-
+        
         if tail_z_hyp == "Two-tailed":
             crit_val_display_z = f"±{format_value_for_display(crit_val_z_upper_plot)}" if crit_val_z_upper_plot is not None else "N/A"
             p_val_calc_z_summary = p_val_z_two_summary
@@ -443,13 +442,13 @@ def tab_z_distribution():
         
         st.markdown(f"""
         1.  **Critical Value ({tail_z_hyp})**: {crit_val_display_z}
-            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_display_z:.4f}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_z_hyp:.8f}
         2.  **Your Calculated Test Statistic**: {test_stat_z_hyp:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_z_summary, decimals=4)} ({apa_p_value(p_val_calc_z_summary)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_z_summary else 'not rejected'}**.
             * *Reason*: z(calc) {comparison_crit_str_z} relative to z(crit).
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_z_summary else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_z_summary)} is {'less than' if decision_p_alpha_z_summary else 'not less than'} α ({alpha_z_hyp:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_z_summary)} is {'less than' if decision_p_alpha_z_summary else 'not less than'} α ({alpha_z_hyp:.8f}).
         5.  **APA 7 Style Report**:
             *z* = {test_stat_z_hyp:.2f}, {apa_p_value(p_val_calc_z_summary)}. The null hypothesis was {'rejected' if decision_p_alpha_z_summary else 'not rejected'} at α = {alpha_z_hyp:.2f}.
         """)
@@ -462,7 +461,7 @@ def tab_f_distribution():
 
     with col1:
         st.subheader("Inputs")
-        alpha_f_input = st.number_input("Alpha (α) for Table/Plot", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_f_input_tab3")
+        alpha_f_input = st.number_input("Alpha (α) for Table/Plot", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_f_input_tab3")
         
         all_df1_options = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 24, 30, 40, 50, 60, 80, 100, 120, 1000]
         all_df2_options = list(range(1,21)) + [22, 24, 26, 28, 30, 35, 40, 45, 50, 60, 80, 100, 120, 1000] 
@@ -494,14 +493,14 @@ def tab_f_distribution():
             crit_val_f_upper_plot = stats.f.ppf(1 - alpha_for_plot, df1_f_selected, df2_f_selected)
             if crit_val_f_upper_plot is not None and not np.isnan(crit_val_f_upper_plot):
                 x_fill_upper = np.linspace(crit_val_f_upper_plot, plot_max_f, 100)
-                ax_f.fill_between(x_fill_upper, stats.f.pdf(x_fill_upper, df1_f_selected, df2_f_selected), color='red', alpha=0.5, label=f'α = {alpha_for_plot:.4f}')
+                ax_f.fill_between(x_fill_upper, stats.f.pdf(x_fill_upper, df1_f_selected, df2_f_selected), color='red', alpha=0.5, label=f'α = {alpha_for_plot:.8f}')
                 ax_f.axvline(crit_val_f_upper_plot, color='red', linestyle='--', lw=1)
         else: 
             crit_val_f_upper_plot = stats.f.ppf(1 - alpha_for_plot / 2, df1_f_selected, df2_f_selected)
             crit_val_f_lower_plot = stats.f.ppf(alpha_for_plot / 2, df1_f_selected, df2_f_selected)
             if crit_val_f_upper_plot is not None and not np.isnan(crit_val_f_upper_plot):
                 x_fill_upper = np.linspace(crit_val_f_upper_plot, plot_max_f, 100)
-                ax_f.fill_between(x_fill_upper, stats.f.pdf(x_fill_upper, df1_f_selected, df2_f_selected), color='red', alpha=0.5, label=f'α/2 = {alpha_for_plot/2:.4f}')
+                ax_f.fill_between(x_fill_upper, stats.f.pdf(x_fill_upper, df1_f_selected, df2_f_selected), color='red', alpha=0.5, label=f'α/2 = {alpha_for_plot/2:.8f}')
                 ax_f.axvline(crit_val_f_upper_plot, color='red', linestyle='--', lw=1)
             if crit_val_f_lower_plot is not None and not np.isnan(crit_val_f_lower_plot):
                 x_fill_lower = np.linspace(plot_min_f, crit_val_f_lower_plot, 100)
@@ -516,7 +515,7 @@ def tab_f_distribution():
         ax_f.grid(True, linestyle=':', alpha=0.7)
         st.pyplot(fig_f)
 
-        st.subheader(f"Critical F-Values for α = {alpha_f_input:.3f} (Upper Tail)")
+        st.subheader(f"Critical F-Values for α = {alpha_f_input:.8f} (Upper Tail)")
         table_df1_display_cols = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 60, 120] 
         table_df2_window = get_dynamic_df_window(all_df2_options, df2_f_selected, window_size=5)
 
@@ -555,7 +554,7 @@ def tab_f_distribution():
         st.markdown(df_f_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                        {'selector': 'td', 'props': [('text-align', 'center')]}])
                                      .apply(style_f_table, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption(f"Table shows F-critical values for user-selected α={alpha_f_input:.3f} (upper tail). Highlighted for df₁ closest to {df1_f_selected} and df₂ closest to {df2_f_selected}.")
+        st.caption(f"Table shows F-critical values for user-selected α={alpha_f_input:.8f} (upper tail). Highlighted for df₁ closest to {df1_f_selected} and df₂ closest to {df2_f_selected}.")
         st.markdown("""
         **Table Interpretation Note:**
         * This table shows upper-tail critical values F<sub>α, df₁, df₂</sub> for the selected α.
@@ -581,8 +580,7 @@ def tab_f_distribution():
         p_val_f_two_summary = min(p_val_f_two_summary, 1.0)
 
         crit_val_f_display_summary = "N/A"
-        p_val_for_crit_val_f_display_summary = alpha_f_input 
-
+        
         if tail_f == "One-tailed (right)":
             crit_val_f_display_summary = format_value_for_display(crit_val_f_upper_plot) if crit_val_f_upper_plot is not None else "N/A"
             p_val_calc_f_summary = p_val_f_one_right_summary
@@ -599,14 +597,14 @@ def tab_f_distribution():
         decision_p_alpha_f_summary = p_val_calc_f_summary < alpha_f_input 
         
         st.markdown(f"""
-        1.  **Critical Value(s) ({tail_f}) for α={alpha_f_input:.4f}**: {crit_val_f_display_summary}
-            * *Associated p-value (α or α/2 per tail)*: {p_val_for_crit_val_f_display_summary:.4f}
+        1.  **Critical Value(s) ({tail_f}) for α={alpha_f_input:.8f}**: {crit_val_f_display_summary}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_f_input:.8f}
         2.  **Calculated Test Statistic**: {test_stat_f:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_f_summary, decimals=4)} ({apa_p_value(p_val_calc_f_summary)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_f_summary else 'not rejected'}**.
             * *Reason*: F(calc) {comparison_crit_str_f} relative to F(crit).
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_f_summary else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_f_summary)} is {'less than' if decision_p_alpha_f_summary else 'not less than'} α ({alpha_f_input:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_f_summary)} is {'less than' if decision_p_alpha_f_summary else 'not less than'} α ({alpha_f_input:.8f}).
         5.  **APA 7 Style Report**:
             *F*({df1_f_selected}, {df2_f_selected}) = {test_stat_f:.2f}, {apa_p_value(p_val_calc_f_summary)}. The null hypothesis was {'rejected' if decision_p_alpha_f_summary else 'not rejected'} at α = {alpha_f_input:.2f}.
         """)
@@ -618,7 +616,7 @@ def tab_chi_square_distribution():
 
     with col1:
         st.subheader("Inputs")
-        alpha_chi2_input = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_chi2_input_tab4")
+        alpha_chi2_input = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_chi2_input_tab4")
         all_df_chi2_options = list(range(1, 31)) + [35, 40, 45, 50, 60, 70, 80, 90, 100]
         df_chi2_selected = st.selectbox("Degrees of Freedom (df)", options=all_df_chi2_options, index=all_df_chi2_options.index(5), key="df_chi2_selectbox_tab4") 
         
@@ -645,14 +643,14 @@ def tab_chi_square_distribution():
             crit_val_chi2_upper_plot = stats.chi2.ppf(1 - alpha_chi2_input, df_chi2_selected)
             if crit_val_chi2_upper_plot is not None and not np.isnan(crit_val_chi2_upper_plot):
                 x_fill_upper = np.linspace(crit_val_chi2_upper_plot, plot_max_chi2, 100)
-                ax_chi2.fill_between(x_fill_upper, stats.chi2.pdf(x_fill_upper, df_chi2_selected), color='red', alpha=0.5, label=f'α = {alpha_chi2_input:.4f}')
+                ax_chi2.fill_between(x_fill_upper, stats.chi2.pdf(x_fill_upper, df_chi2_selected), color='red', alpha=0.5, label=f'α = {alpha_chi2_input:.8f}')
                 ax_chi2.axvline(crit_val_chi2_upper_plot, color='red', linestyle='--', lw=1)
         else: 
             crit_val_chi2_upper_plot = stats.chi2.ppf(1 - alpha_chi2_input / 2, df_chi2_selected)
             crit_val_chi2_lower_plot = stats.chi2.ppf(alpha_chi2_input / 2, df_chi2_selected)
             if crit_val_chi2_upper_plot is not None and not np.isnan(crit_val_chi2_upper_plot):
                 x_fill_upper_chi2 = np.linspace(crit_val_chi2_upper_plot, plot_max_chi2, 100)
-                ax_chi2.fill_between(x_fill_upper_chi2, stats.chi2.pdf(x_fill_upper_chi2, df_chi2_selected), color='red', alpha=0.5, label=f'α/2 = {alpha_chi2_input/2:.4f}')
+                ax_chi2.fill_between(x_fill_upper_chi2, stats.chi2.pdf(x_fill_upper_chi2, df_chi2_selected), color='red', alpha=0.5, label=f'α/2 = {alpha_chi2_input/2:.8f}')
                 ax_chi2.axvline(crit_val_chi2_upper_plot, color='red', linestyle='--', lw=1)
             if crit_val_chi2_lower_plot is not None and not np.isnan(crit_val_chi2_lower_plot):
                 x_fill_lower_chi2 = np.linspace(plot_min_chi2, crit_val_chi2_lower_plot, 100)
@@ -751,13 +749,13 @@ def tab_chi_square_distribution():
         
         st.markdown(f"""
         1.  **Critical Value(s) ({tail_chi2})**: {crit_val_chi2_display_summary}
-            * *Associated p-value (α or α/2 per tail)*: {alpha_chi2_input:.4f} 
+            * *Associated p-value (α or α/2 per tail)*: {alpha_chi2_input:.8f} 
         2.  **Calculated Test Statistic**: {test_stat_chi2:.3f}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_chi2_summary, decimals=4)} ({apa_p_value(p_val_calc_chi2_summary)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_chi2_summary else 'not rejected'}**.
             * *Reason*: χ²(calc) {comparison_crit_str_chi2} relative to χ²(crit).
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_chi2_summary else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_chi2_summary)} is {'less than' if decision_p_alpha_chi2_summary else 'not less than'} α ({alpha_chi2_input:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_chi2_summary)} is {'less than' if decision_p_alpha_chi2_summary else 'not less than'} α ({alpha_chi2_input:.8f}).
         5.  **APA 7 Style Report**:
             χ²({df_chi2_selected}) = {test_stat_chi2:.2f}, {apa_p_value(p_val_calc_chi2_summary)}. The null hypothesis was {'rejected' if decision_p_alpha_chi2_summary else 'not rejected'} at α = {alpha_chi2_input:.2f}.
         """)
@@ -770,7 +768,7 @@ def tab_mann_whitney_u():
 
     with col1:
         st.subheader("Inputs")
-        alpha_mw = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_mw_input")
+        alpha_mw = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_mw_input")
         n1_mw = st.number_input("Sample Size Group 1 (n1)", 1, 1000, 10, 1, key="n1_mw_input") 
         n2_mw = st.number_input("Sample Size Group 2 (n2)", 1, 1000, 12, 1, key="n2_mw_input") 
         tail_mw = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_mw_radio")
@@ -795,8 +793,8 @@ def tab_mann_whitney_u():
 
         st.subheader("Distribution Plot (Normal Approximation)")
         fig_mw, ax_mw = plt.subplots(figsize=(8,5))
-        plot_min_z_mw = min(stats.norm.ppf(0.0001), z_calc_mw - 2, -4.0)
-        plot_max_z_mw = max(stats.norm.ppf(0.9999), z_calc_mw + 2, 4.0)
+        plot_min_z_mw = min(stats.norm.ppf(0.00000001), z_calc_mw - 2, -4.0)
+        plot_max_z_mw = max(stats.norm.ppf(0.99999999), z_calc_mw + 2, 4.0)
         if abs(z_calc_mw) > 4 and abs(z_calc_mw) > plot_max_z_mw * 0.8:
             plot_min_z_mw = min(plot_min_z_mw, z_calc_mw -1); plot_max_z_mw = max(plot_max_z_mw, z_calc_mw +1)
         
@@ -827,7 +825,7 @@ def tab_mann_whitney_u():
         z_crit_for_table_mw = crit_z_upper_mw_plot if tail_mw == "One-tailed (right)" else \
                               (crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None and tail_mw == "Two-tailed" else \
                               (crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None else 0.0) )
-        if np.isnan(z_crit_for_table_mw): z_crit_for_table_mw = 0.0
+        if z_crit_for_table_mw is None or np.isnan(z_crit_for_table_mw): z_crit_for_table_mw = 0.0
 
 
         all_z_row_labels_mw = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
@@ -858,7 +856,7 @@ def tab_mann_whitney_u():
         
         df_z_lookup_table_mw = pd.DataFrame(table_data_z_lookup_mw).set_index('z')
 
-        def style_z_lookup_table_mw(df_to_style): # Reusing z-table styling logic
+        def style_z_lookup_table_mw(df_to_style): 
             data = df_to_style 
             style_df = pd.DataFrame('', index=data.index, columns=data.columns)
             z_crit_val_to_highlight = z_crit_for_table_mw
@@ -889,7 +887,7 @@ def tab_mann_whitney_u():
         st.markdown(df_z_lookup_table_mw.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                                {'selector': 'td', 'props': [('text-align', 'center')]}])
                                      .apply(style_z_lookup_table_mw, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_mw:.3f} and tail selection.")
+        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_mw:.8f} and tail selection.")
 
 
     with col2: 
@@ -927,13 +925,13 @@ def tab_mann_whitney_u():
         
         st.markdown(f"""
         1.  **Critical z-value ({tail_mw})**: {crit_val_z_display_mw}
-            * *Associated p-value (α or α/2 per tail)*: {alpha_mw:.4f}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_mw:.8f}
         2.  **Calculated U-statistic**: {u_stat_mw:.1f} (Approx. z-statistic: {z_calc_mw:.3f})
             * *Calculated p-value (Normal Approx.)*: {format_value_for_display(p_val_calc_mw, decimals=4)} ({apa_p_value(p_val_calc_mw)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_mw else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_mw}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_mw else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_mw)} is {'less than' if decision_p_alpha_mw else 'not less than'} α ({alpha_mw:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_mw)} is {'less than' if decision_p_alpha_mw else 'not less than'} α ({alpha_mw:.8f}).
         5.  **APA 7 Style Report (based on Normal Approximation)**:
             A Mann-Whitney U test (using normal approximation) indicated that the outcome for group 1 (n<sub>1</sub>={n1_mw}) was {'' if decision_p_alpha_mw else 'not '}statistically significantly different from group 2 (n<sub>2</sub>={n2_mw}), *U* = {u_stat_mw:.1f}, *z* = {z_calc_mw:.2f}, {apa_p_value(p_val_calc_mw)}. The null hypothesis was {'rejected' if decision_p_alpha_mw else 'not rejected'} at α = {alpha_mw:.2f}.
         """)
@@ -945,7 +943,7 @@ def tab_wilcoxon_t():
 
     with col1:
         st.subheader("Inputs")
-        alpha_w = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_w_input")
+        alpha_w = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_w_input")
         n_w = st.number_input("Sample Size (n, non-zero differences)", 1, 1000, 15, 1, key="n_w_input") 
         tail_w = st.radio("Tail Selection", ("Two-tailed", "One-tailed (right)", "One-tailed (left)"), key="tail_w_radio")
         t_stat_w_input = st.number_input("Calculated T-statistic (sum of ranks)", value=float(n_w*(n_w+1)/4 / 2 if n_w >0 else 0), format="%.1f", min_value=0.0, max_value=float(n_w*(n_w+1)/2 if n_w > 0 else 0), key="t_stat_w_input")
@@ -970,8 +968,8 @@ def tab_wilcoxon_t():
         
         st.subheader("Distribution Plot (Normal Approximation)")
         fig_w, ax_w = plt.subplots(figsize=(8,5)); 
-        plot_min_z_w = min(stats.norm.ppf(0.0001), z_calc_w - 2, -4.0)
-        plot_max_z_w = max(stats.norm.ppf(0.9999), z_calc_w + 2, 4.0)
+        plot_min_z_w = min(stats.norm.ppf(0.00000001), z_calc_w - 2, -4.0)
+        plot_max_z_w = max(stats.norm.ppf(0.99999999), z_calc_w + 2, 4.0)
         if abs(z_calc_w) > 4 and abs(z_calc_w) > plot_max_z_w * 0.8:
              plot_min_z_w = min(plot_min_z_w, z_calc_w -1)
              plot_max_z_w = max(plot_max_z_w, z_calc_w +1)
@@ -1003,7 +1001,7 @@ def tab_wilcoxon_t():
         z_crit_for_table_w = crit_z_upper_w_plot if tail_w == "One-tailed (right)" else \
                              (crit_z_upper_w_plot if crit_z_upper_w_plot is not None and tail_w == "Two-tailed" else \
                              (crit_z_lower_w_plot if crit_z_lower_w_plot is not None else 0.0) )
-        if np.isnan(z_crit_for_table_w): z_crit_for_table_w = 0.0
+        if z_crit_for_table_w is None or np.isnan(z_crit_for_table_w): z_crit_for_table_w = 0.0
         
         all_z_row_labels_w = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
         z_col_labels_str_w = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
@@ -1064,7 +1062,7 @@ def tab_wilcoxon_t():
         st.markdown(df_z_lookup_table_w.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                                {'selector': 'td', 'props': [('text-align', 'center')]}])
                                      .apply(style_z_lookup_table_w, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_w:.3f} and tail selection.")
+        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_w:.8f} and tail selection.")
 
 
     with col2: # Summary for Wilcoxon T
@@ -1101,13 +1099,13 @@ def tab_wilcoxon_t():
         
         st.markdown(f"""
         1.  **Critical z-value ({tail_w})**: {crit_val_display_w}
-            * *Associated p-value (α or α/2 per tail)*: {alpha_w:.4f}
+            * *Associated p-value (α or α/2 per tail)*: {alpha_w:.8f}
         2.  **Calculated T-statistic**: {t_stat_w_input:.1f} (Approx. z-statistic: {z_calc_w:.3f})
             * *Calculated p-value (Normal Approx.)*: {format_value_for_display(p_val_calc_w, decimals=4)} ({apa_p_value(p_val_calc_w)})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_w else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_w}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_w else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_w)} is {'less than' if decision_p_alpha_w else 'not less than'} α ({alpha_w:.8f}).
         5.  **APA 7 Style Report (based on Normal Approximation)**:
             A Wilcoxon signed-rank test (using normal approximation) indicated that the median difference was {'' if decision_p_alpha_w else 'not '}statistically significant, *T* = {t_stat_w_input:.1f}, *z* = {z_calc_w:.2f}, {apa_p_value(p_val_calc_w)}. The null hypothesis was {'rejected' if decision_p_alpha_w else 'not rejected'} at α = {alpha_w:.2f} (n={n_w}).
         """)
@@ -1119,7 +1117,7 @@ def tab_binomial_test():
 
     with col1:
         st.subheader("Inputs")
-        alpha_b = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_b_input")
+        alpha_b = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_b_input")
         n_b = st.number_input("Number of Trials (n)", 1, 1000, 20, 1, key="n_b_input")
         p_null_b = st.number_input("Null Hypothesis Probability (p₀)", 0.00, 1.00, 0.5, 0.01, format="%.2f", key="p_null_b_input")
         k_success_b = st.number_input("Number of Successes (k)", 0, n_b, int(n_b * p_null_b), 1, key="k_success_b_input")
@@ -1211,13 +1209,13 @@ def tab_binomial_test():
         
         st.markdown(f"""
         1.  **Critical Region**: {crit_val_b_display}
-            * *Significance level (α)*: {alpha_b:.4f}
+            * *Significance level (α)*: {alpha_b:.8f}
         2.  **Observed Number of Successes (k)**: {k_success_b}
             * *Calculated p-value*: {format_value_for_display(p_val_calc_b, decimals=4)} ({apa_p_value(p_val_calc_b)})
         3.  **Decision (Critical Region Method - based on p-value)**: H₀ is **{'rejected' if decision_crit_b else 'not rejected'}**.
             * *Reason*: For discrete tests, the p-value method is generally preferred for decision making.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_b else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_b)} is {'less than' if decision_p_alpha_b else 'not less than'} α ({alpha_b:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_b)} is {'less than' if decision_p_alpha_b else 'not less than'} α ({alpha_b:.8f}).
         5.  **APA 7 Style Report**:
             A binomial test was performed to assess whether the proportion of successes (k={k_success_b}, n={n_b}) was different from the null hypothesis proportion of p₀={p_null_b}. The result was {'' if decision_p_alpha_b else 'not '}statistically significant, {apa_p_value(p_val_calc_b)}. The null hypothesis was {'rejected' if decision_p_alpha_b else 'not rejected'} at α = {alpha_b:.2f}.
         """)
@@ -1230,7 +1228,7 @@ def tab_tukey_hsd():
     
     with col1:
         st.subheader("Inputs for Normal Approximation")
-        alpha_tukey = st.number_input("Alpha (α) for z-comparison", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_tukey_approx_input")
+        alpha_tukey = st.number_input("Alpha (α) for z-comparison", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_tukey_approx_input")
         k_tukey_selected = st.number_input("Number of Groups (k) (for context)", min_value=2, value=3, step=1, key="k_tukey_context_selectbox") 
         df_error_tukey_selected = st.number_input("Degrees of Freedom for Error (df_error) (for context)", min_value=1, value=20, step=1, key="df_error_context_selectbox")
         
@@ -1245,7 +1243,7 @@ def tab_tukey_hsd():
         critical values and p-values. Your input 'Calculated Statistic' will be treated as a z-score for this comparison.
         This is a **significant simplification** and does **not** represent a true Tukey HSD test, which requires the 
         Studentized Range (q) distribution. For accurate Tukey HSD results, please use statistical software 
-        that implements the Studentized Range distribution (e.g., `statsmodels` in Python, or R), and ensure `statsmodels` is correctly installed in your environment.
+        that implements the Studentized Range distribution (e.g., `statsmodels` in Python, or R), and ensure `statsmodels` is correctly installed in your environment if you wish to use its direct calculations (not implemented in this simplified tab).
         """)
 
         st.subheader("Standard Normal (z) Distribution Plot")
@@ -1259,8 +1257,8 @@ def tab_tukey_hsd():
         else: # One-tailed (right)
             z_crit_upper_tukey_approx = stats.norm.ppf(1 - alpha_tukey)
 
-        plot_min_z_tukey = min(stats.norm.ppf(0.001), test_stat_tukey_q_as_z - 2, -4.0)
-        plot_max_z_tukey = max(stats.norm.ppf(0.999), test_stat_tukey_q_as_z + 2, 4.0)
+        plot_min_z_tukey = min(stats.norm.ppf(0.00000001), test_stat_tukey_q_as_z - 2, -4.0)
+        plot_max_z_tukey = max(stats.norm.ppf(0.99999999), test_stat_tukey_q_as_z + 2, 4.0)
         if abs(test_stat_tukey_q_as_z) > 3.5 : 
              plot_min_z_tukey = min(plot_min_z_tukey, test_stat_tukey_q_as_z - 0.5)
              plot_max_z_tukey = max(plot_max_z_tukey, test_stat_tukey_q_as_z + 0.5)
@@ -1272,7 +1270,7 @@ def tab_tukey_hsd():
         if z_crit_upper_tukey_approx is not None and not np.isnan(z_crit_upper_tukey_approx):
             x_fill_upper = np.linspace(z_crit_upper_tukey_approx, plot_max_z_tukey, 100)
             ax_tukey_approx.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, 
-                                  label=f'Crit. Region (α={alpha_tukey/2 if tukey_tail_selection_approx == "Two-tailed" else alpha_tukey:.3f})')
+                                  label=f'Crit. Region (α={alpha_tukey/2 if tukey_tail_selection_approx == "Two-tailed" else alpha_tukey:.8f})')
             ax_tukey_approx.axvline(z_crit_upper_tukey_approx, color='red', linestyle='--', lw=1)
         if z_crit_lower_tukey_approx is not None and not np.isnan(z_crit_lower_tukey_approx) and tukey_tail_selection_approx == "Two-tailed":
             x_fill_lower = np.linspace(plot_min_z_tukey, z_crit_lower_tukey_approx, 100)
@@ -1280,7 +1278,7 @@ def tab_tukey_hsd():
             ax_tukey_approx.axvline(z_crit_lower_tukey_approx, color='red', linestyle='--', lw=1)
         
         ax_tukey_approx.axvline(test_stat_tukey_q_as_z, color='green', linestyle='-', lw=2, label=f'Input Stat (as z) = {test_stat_tukey_q_as_z:.3f}')
-        ax_tukey_approx.set_title(f'Standard Normal Distribution for Approximation (α={alpha_tukey:.3f})')
+        ax_tukey_approx.set_title(f'Standard Normal Distribution for Approximation (α={alpha_tukey:.8f})')
         ax_tukey_approx.set_xlabel('Value (Treated as z-score)')
         ax_tukey_approx.set_ylabel('Probability Density')
         ax_tukey_approx.legend(); ax_tukey_approx.grid(True); st.pyplot(fig_tukey_approx)
@@ -1358,7 +1356,7 @@ def tab_tukey_hsd():
         st.markdown(df_z_lookup_table_tukey.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
                                                                {'selector': 'td', 'props': [('text-align', 'center')]}])
                                      .apply(style_z_lookup_table_tukey, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_tukey:.3f} and tail selection.")
+        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_tukey:.8f} and tail selection.")
 
 
     with col2: 
@@ -1400,13 +1398,13 @@ def tab_tukey_hsd():
             
         st.markdown(f"""
         1.  **Approximate Critical z-value ({tukey_tail_selection_approx})**: {crit_val_tukey_display}
-            * *Significance level (α)*: {alpha_tukey:.4f}
+            * *Significance level (α)*: {alpha_tukey:.8f}
         2.  **Input Statistic (treated as z-score)**: {test_stat_tukey_q_as_z:.3f}
             * *Approximate p-value (from z-dist)*: {format_value_for_display(p_val_calc_tukey_approx, decimals=4)} ({apa_p_value(p_val_calc_tukey_approx)})
         3.  **Decision (Approx. Critical Value Method)**: H₀ (no difference) is **{'rejected' if decision_crit_tukey_approx else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_tukey}.
         4.  **Decision (Approx. p-value Method)**: H₀ (no difference) is **{'rejected' if decision_p_alpha_tukey_approx else 'not rejected'}**.
-            * *Reason*: {apa_p_value(p_val_calc_tukey_approx)} is {'less than' if decision_p_alpha_tukey_approx else 'not less than'} α ({alpha_tukey:.4f}).
+            * *Reason*: {apa_p_value(p_val_calc_tukey_approx)} is {'less than' if decision_p_alpha_tukey_approx else 'not less than'} α ({alpha_tukey:.8f}).
         5.  **APA 7 Style Report (using Normal Approximation)**:
             Using a normal approximation for comparison, an input statistic of {test_stat_tukey_q_as_z:.2f} (for k={k_tukey_selected} groups, df<sub>error</sub>={df_error_tukey_selected}) yielded an approximate {apa_p_value(p_val_calc_tukey_approx)}. The null hypothesis of no difference for this pair was {'rejected' if decision_p_alpha_tukey_approx else 'not rejected'} at α = {alpha_tukey:.2f}. (Note: This is a z-distribution based approximation, not a standard Tukey HSD test).
         """)
@@ -1419,7 +1417,7 @@ def tab_kruskal_wallis():
 
     with col1:
         st.subheader("Inputs")
-        alpha_kw = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_kw_input")
+        alpha_kw = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_kw_input")
         k_groups_kw = st.number_input("Number of Groups (k)", 2, 50, 3, 1, key="k_groups_kw_input") 
         df_kw = k_groups_kw - 1
         st.markdown(f"Degrees of Freedom (df) = k - 1 = {df_kw}")
@@ -1443,7 +1441,7 @@ def tab_kruskal_wallis():
 
             if isinstance(crit_val_chi2_kw_plot, (int, float)) and not np.isnan(crit_val_chi2_kw_plot):
                 x_fill_upper_kw = np.linspace(crit_val_chi2_kw_plot, plot_max_chi2_kw, 100)
-                ax_kw.fill_between(x_fill_upper_kw, stats.chi2.pdf(x_fill_upper_kw, df_kw), color='red', alpha=0.5, label=f'α = {alpha_kw:.4f}')
+                ax_kw.fill_between(x_fill_upper_kw, stats.chi2.pdf(x_fill_upper_kw, df_kw), color='red', alpha=0.5, label=f'α = {alpha_kw:.8f}')
                 ax_kw.axvline(crit_val_chi2_kw_plot, color='red', linestyle='--', lw=1, label=f'χ²_crit = {crit_val_chi2_kw_plot:.3f}')
             
             ax_kw.axvline(test_stat_h_kw, color='green', linestyle='-', lw=2, label=f'H_calc = {test_stat_h_kw:.3f}')
@@ -1536,13 +1534,13 @@ def tab_kruskal_wallis():
 
         st.markdown(f"""
         1.  **Critical χ²-value (df={df_kw})**: {summary_crit_val_chi2_kw_display_str}
-            * *Associated p-value (α)*: {alpha_kw:.4f}
+            * *Associated p-value (α)*: {alpha_kw:.8f}
         2.  **Calculated H-statistic**: {format_value_for_display(test_stat_h_kw)}
             * *Calculated p-value (from χ² approx.)*: {format_value_for_display(p_val_calc_kw_num, decimals=4)} ({apa_p_val_calc_kw_str})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_kw else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_kw}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_kw else 'not rejected'}**.
-            * *Reason*: {apa_p_val_calc_kw_str} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.4f}). 
+            * *Reason*: {apa_p_val_calc_kw_str} is {'less than' if decision_p_alpha_kw else 'not less than'} α ({alpha_kw:.8f}). 
         5.  **APA 7 Style Report**:
             A Kruskal-Wallis H test showed that there was {'' if decision_p_alpha_kw else 'not '}a statistically significant difference in medians between the k={k_groups_kw} groups, {apa_H_stat}, {apa_p_val_calc_kw_str}. The null hypothesis was {'rejected' if decision_p_alpha_kw else 'not rejected'} at α = {alpha_kw:.2f}.
         """)
@@ -1554,7 +1552,7 @@ def tab_friedman_test():
 
     with col1:
         st.subheader("Inputs")
-        alpha_fr = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_fr_input")
+        alpha_fr = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_fr_input")
         k_conditions_fr = st.number_input("Number of Conditions/Treatments (k)", 2, 50, 3, 1, key="k_conditions_fr_input") 
         n_blocks_fr = st.number_input("Number of Blocks/Subjects (n)", 2, 200, 10, 1, key="n_blocks_fr_input") 
         
@@ -1582,7 +1580,7 @@ def tab_friedman_test():
             
             if isinstance(crit_val_chi2_fr_plot, (int,float)) and not np.isnan(crit_val_chi2_fr_plot):
                 x_fill_upper_fr = np.linspace(crit_val_chi2_fr_plot, plot_max_chi2_fr, 100)
-                ax_fr.fill_between(x_fill_upper_fr, stats.chi2.pdf(x_fill_upper_fr, df_fr), color='red', alpha=0.5, label=f'α = {alpha_fr:.4f}')
+                ax_fr.fill_between(x_fill_upper_fr, stats.chi2.pdf(x_fill_upper_fr, df_fr), color='red', alpha=0.5, label=f'α = {alpha_fr:.8f}')
                 ax_fr.axvline(crit_val_chi2_fr_plot, color='red', linestyle='--', lw=1, label=f'χ²_crit = {crit_val_chi2_fr_plot:.3f}')
             
             ax_fr.axvline(test_stat_q_fr, color='green', linestyle='-', lw=2, label=f'Q_calc = {test_stat_q_fr:.3f}')
@@ -1671,13 +1669,13 @@ def tab_friedman_test():
 
         st.markdown(f"""
         1.  **Critical χ²-value (df={df_fr})**: {summary_crit_val_chi2_fr_display_str}
-            * *Associated p-value (α)*: {alpha_fr:.4f}
+            * *Associated p-value (α)*: {alpha_fr:.8f}
         2.  **Calculated Q-statistic (χ²_r)**: {format_value_for_display(test_stat_q_fr)}
             * *Calculated p-value (from χ² approx.)*: {format_value_for_display(p_val_calc_fr_num, decimals=4)} ({apa_p_val_calc_fr_str})
         3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_fr else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_fr}.
         4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_fr else 'not rejected'}**.
-            * *Reason*: {apa_p_val_calc_fr_str} is {'less than' if decision_p_alpha_fr else 'not less than'} α ({alpha_fr:.4f}).
+            * *Reason*: {apa_p_val_calc_fr_str} is {'less than' if decision_p_alpha_fr else 'not less than'} α ({alpha_fr:.8f}).
         5.  **APA 7 Style Report**:
             A Friedman test indicated that there was {'' if decision_p_alpha_fr else 'not '}a statistically significant difference in medians across the k={k_conditions_fr} conditions for n={n_blocks_fr} blocks, {apa_Q_stat}, {apa_p_val_calc_fr_str}. The null hypothesis was {'rejected' if decision_p_alpha_fr else 'not rejected'} at α = {alpha_fr:.2f}.
         """, unsafe_allow_html=True)
