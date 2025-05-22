@@ -116,8 +116,8 @@ def tab_t_distribution():
             crit_func_pdf_plot = lambda x_val: stats.t.pdf(x_val, df_t_calc)
             std_dev_plot = stats.t.std(df_t_calc) if df_t_calc > 0 and not np.isinf(df_t_calc) else 1.0
         
-        plot_min_t = min(crit_func_ppf_plot(0.00000001), test_stat_t - 2*std_dev_plot, -4.0) # Adjusted for smaller alpha
-        plot_max_t = max(crit_func_ppf_plot(0.99999999), test_stat_t + 2*std_dev_plot, 4.0) # Adjusted for smaller alpha
+        plot_min_t = min(crit_func_ppf_plot(0.00000001), test_stat_t - 2*std_dev_plot, -4.0) 
+        plot_max_t = max(crit_func_ppf_plot(0.99999999), test_stat_t + 2*std_dev_plot, 4.0) 
         if abs(test_stat_t) > 4 and abs(test_stat_t) > plot_max_t * 0.8 : 
             plot_min_t = min(plot_min_t, test_stat_t -1)
             plot_max_t = max(plot_max_t, test_stat_t +1)
@@ -162,7 +162,7 @@ def tab_t_distribution():
         st.subheader("Critical t-Values (Upper Tail)")
         
         table_df_window = get_dynamic_df_window(all_df_values_t, df_t_selected_display, window_size=5)
-        table_alpha_cols = [0.10, 0.05, 0.025, 0.01, 0.005] # These are standard table columns, user alpha is for highlighting
+        table_alpha_cols = [0.10, 0.05, 0.025, 0.01, 0.005] 
 
         table_rows = []
         for df_iter_display in table_df_window:
@@ -189,9 +189,8 @@ def tab_t_distribution():
             if tail_t == "Two-tailed":
                 target_alpha_for_col_highlight = alpha_t_input / 2.0
             
-            # Find the closest alpha in table_alpha_cols to the user's (potentially very small) alpha
             closest_alpha_col_val = min(table_alpha_cols, key=lambda x: abs(x - target_alpha_for_col_highlight))
-            highlight_col_name = f"α = {closest_alpha_col_val:.3f}" # Use the format of the table column header
+            highlight_col_name = f"α = {closest_alpha_col_val:.3f}" 
 
             if highlight_col_name in df_to_style.columns:
                 for r_idx in df_to_style.index:
@@ -822,9 +821,13 @@ def tab_mann_whitney_u():
         st.subheader("Standard Normal Table: Cumulative P(Z < z)")
         st.markdown("This table shows the area to the left of a given z-score. The z-critical value (derived from your alpha and tail selection) is used for highlighting.")
         
-        z_crit_for_table_mw = crit_z_upper_mw_plot if tail_mw == "One-tailed (right)" else \
-                              (crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None and tail_mw == "Two-tailed" else \
-                              (crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None else 0.0) )
+        # Determine z-critical for table centering
+        if tail_mw == "Two-tailed":
+            z_crit_for_table_mw = crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None else 0.0
+        elif tail_mw == "One-tailed (right)":
+            z_crit_for_table_mw = crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None else 0.0
+        else: # One-tailed (left)
+            z_crit_for_table_mw = crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None else 0.0
         if z_crit_for_table_mw is None or np.isnan(z_crit_for_table_mw): z_crit_for_table_mw = 0.0
 
 
