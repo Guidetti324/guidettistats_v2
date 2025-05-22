@@ -1898,12 +1898,12 @@ def tab_critical_r():
 # --- Main app ---
 def main():
     st.set_page_config(page_title="Statistical Table Explorer", layout="wide")
-    st.title("🔢 Statistical Table Explorer")
+    st.title("🧠 Oli's – Statistical Table Explorer - Mk. 2")
     st.markdown("""
     This application provides an interactive way to explore various statistical distributions and tests. 
     Select a tab to begin. On each tab, you can adjust parameters like alpha, degrees of freedom, 
     and input a calculated test statistic to see how it compares to critical values and to understand p-value calculations.
-    **Note for Tukey HSD Tab**: This tab uses a simplified normal (z) distribution approximation. For accurate Tukey HSD results, ensure `statsmodels` is installed in your environment (e.g., add `statsmodels` to `requirements.txt`) and consult statistical software that properly implements the Studentized Range (q) distribution.
+    Built by Dr Oliver Guidetti.
     """)
 
     tab_names = [
