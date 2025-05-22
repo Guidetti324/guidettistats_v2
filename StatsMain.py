@@ -1246,7 +1246,7 @@ def tab_tukey_hsd():
         critical values and p-values. Your input 'Calculated Statistic' will be treated as a z-score for this comparison.
         This is a **significant simplification** and does **not** represent a true Tukey HSD test, which requires the 
         Studentized Range (q) distribution. For accurate Tukey HSD results, please use statistical software 
-        that implements the Studentized Range distribution (e.g., `statsmodels` in Python, or R), and ensure `statsmodels` is correctly installed in your environment if you wish to use its direct calculations (not implemented in this simplified tab).
+        that implements the Studentized Range distribution (e.g., `statsmodels` in Python, or R).
         """)
 
         st.subheader("Standard Normal (z) Distribution Plot")
@@ -1626,7 +1626,7 @@ def tab_friedman_test():
                     style.loc[r_idx, highlight_col_name] = (current_r_style if current_r_style else '') + ' background-color: lightgreen;'
                 if selected_df_str in df_to_style.index:
                     current_c_style = style.loc[selected_df_str, highlight_col_name]
-                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + ' font-weight: bold; border: 2px solid red; background-color: yellow;'
+                    style.loc[selected_df_str, highlight_col_name] = (current_c_style if current_c_style else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
             return style
         
         if df_fr > 0:
@@ -1699,18 +1699,24 @@ def tab_critical_r():
 
         df_r = n_r - 2
         if df_r <= 0:
-            st.error("Sample size (n) must be greater than 2 to calculate degrees of freedom for correlation.")
-            st.stop()
+            st.error("Sample size (n) must be greater than 2 to calculate degrees of freedom for correlation (df = n-2).")
+            # Stop further execution in this tab if df is not valid
+            st.stop() 
         
         st.markdown(f"**Degrees of Freedom (df)** = n - 2 = **{df_r}**")
 
         # Convert r to t for plotting and p-value
         t_observed_r = float('nan')
-        if abs(test_stat_r) < 1: # Avoid division by zero or sqrt of negative
+        if abs(test_stat_r) < 1.0: # Ensure 1-r^2 is not zero or negative
             try:
                 t_observed_r = test_stat_r * math.sqrt(df_r / (1 - test_stat_r**2))
-            except ZeroDivisionError: # Should be caught by abs(test_stat_r) < 1 but as a safeguard
-                 t_observed_r = float('inf') if test_stat_r != 0 else 0.0
+            except ZeroDivisionError: 
+                 t_observed_r = float('inf') * np.sign(test_stat_r) if test_stat_r != 0 else 0.0
+            except ValueError: # Catches math domain error if 1-r^2 is negative (should not happen with abs(r)<1)
+                 t_observed_r = float('nan')
+        elif abs(test_stat_r) == 1.0:
+            t_observed_r = float('inf') * np.sign(test_stat_r)
+
 
         st.markdown(f"**Observed r converted to t-statistic (for plot & p-value):** {format_value_for_display(t_observed_r)}")
 
@@ -1722,11 +1728,17 @@ def tab_critical_r():
         crit_func_ppf_plot_r = lambda q_val: stats.t.ppf(q_val, df_r)
         crit_func_pdf_plot_r = lambda x_val: stats.t.pdf(x_val, df_r)
         
-        plot_min_r_t = min(crit_func_ppf_plot_r(0.00000001), t_observed_r - 3 if not np.isnan(t_observed_r) else -3, -4.0)
-        plot_max_r_t = max(crit_func_ppf_plot_r(0.99999999), t_observed_r + 3 if not np.isnan(t_observed_r) else 3, 4.0)
-        if not np.isnan(t_observed_r) and abs(t_observed_r) > 4 and abs(t_observed_r) > plot_max_r_t * 0.8 : 
-            plot_min_r_t = min(plot_min_r_t, t_observed_r -1)
-            plot_max_r_t = max(plot_max_r_t, t_observed_r +1)
+        # Define plot limits carefully, especially if t_observed_r is inf
+        if np.isinf(t_observed_r):
+            plot_min_r_t = -5 if t_observed_r < 0 else crit_func_ppf_plot_r(0.00000001)
+            plot_max_r_t = 5 if t_observed_r > 0 else crit_func_ppf_plot_r(0.99999999)
+        else:
+            plot_min_r_t = min(crit_func_ppf_plot_r(0.00000001), t_observed_r - 3 if not np.isnan(t_observed_r) else -3, -4.0)
+            plot_max_r_t = max(crit_func_ppf_plot_r(0.99999999), t_observed_r + 3 if not np.isnan(t_observed_r) else 3, 4.0)
+            if not np.isnan(t_observed_r) and abs(t_observed_r) > 4 and abs(t_observed_r) > plot_max_r_t * 0.8 : 
+                plot_min_r_t = min(plot_min_r_t, t_observed_r -1)
+                plot_max_r_t = max(plot_max_r_t, t_observed_r +1)
+
 
         x_r_t_plot = np.linspace(plot_min_r_t, plot_max_r_t, 500)
         y_r_t_plot = crit_func_pdf_plot_r(x_r_t_plot)
@@ -1768,18 +1780,18 @@ def tab_critical_r():
         ax_r.legend(); ax_r.grid(True); st.pyplot(fig_r)
 
         st.subheader("Critical r-Values Table (Two-tailed)")
-        all_df_r_options = list(range(1, 101)) + [120, 150, 200, 500, 1000] # More df options for r table
+        all_df_r_options = list(range(1, 101)) + [120, 150, 200, 500, 1000] 
         table_df_r_window = get_dynamic_df_window(all_df_r_options, df_r, window_size=5)
-        table_alpha_r_cols = [0.10, 0.05, 0.02, 0.01, 0.001] # Standard alphas for r tables (usually two-tailed)
+        table_alpha_r_cols = [0.10, 0.05, 0.02, 0.01, 0.001] 
 
         r_table_rows = []
         for df_iter in table_df_r_window:
             df_iter_calc = int(df_iter)
-            if df_iter_calc <= 0: continue # df must be > 0
+            if df_iter_calc <= 0: continue 
             row_data = {'df (n-2)': str(df_iter_calc)}
             for alpha_col in table_alpha_r_cols:
-                t_crit_cell = stats.t.ppf(1 - alpha_col / 2, df_iter_calc) # t for two-tailed
-                if t_crit_cell**2 + df_iter_calc == 0: # Avoid division by zero
+                t_crit_cell = stats.t.ppf(1 - alpha_col / 2, df_iter_calc) 
+                if t_crit_cell**2 + df_iter_calc == 0: 
                     r_crit_cell = float('nan')
                 else:
                     r_crit_cell = math.sqrt(t_crit_cell**2 / (t_crit_cell**2 + df_iter_calc))
@@ -1795,12 +1807,12 @@ def tab_critical_r():
             if selected_df_r_str in df_to_style.index: 
                 style.loc[selected_df_r_str, :] = 'background-color: lightblue;'
             
-            # Highlight column closest to user's alpha (considering two-tailed for this table)
             target_alpha_for_col_highlight_r = alpha_r_input
-            if tail_r != "Two-tailed (ρ ≠ 0)": # For one-tailed, table shows two-tailed alphas, so compare with 2*alpha_input
-                target_alpha_for_col_highlight_r = alpha_r_input * 2
+            # For table display, we use the standard two-tailed alpha columns
+            # User's alpha (one or two-tailed) is used to find the closest *two-tailed* alpha column for highlighting
+            effective_table_alpha = alpha_r_input if tail_r == "Two-tailed (ρ ≠ 0)" else alpha_r_input * 2
             
-            closest_alpha_col_val_r = min(table_alpha_r_cols, key=lambda x: abs(x - target_alpha_for_col_highlight_r))
+            closest_alpha_col_val_r = min(table_alpha_r_cols, key=lambda x: abs(x - effective_table_alpha))
             highlight_col_name_r = f"α (2-tail) = {closest_alpha_col_val_r:.3f}"
 
             if highlight_col_name_r in df_to_style.columns:
@@ -1841,12 +1853,12 @@ def tab_critical_r():
         # Calculate precise critical r for summary
         t_crit_summary = float('nan')
         if tail_r == "Two-tailed (ρ ≠ 0)":
-            t_crit_summary = stats.t.ppf(1 - alpha_r_input / 2, df_r)
+            t_crit_summary = stats.t.ppf(1 - alpha_r_input / 2, df_r) if df_r > 0 else float('nan')
         elif tail_r == "One-tailed (positive, ρ > 0)" or tail_r == "One-tailed (negative, ρ < 0)":
-             t_crit_summary = stats.t.ppf(1 - alpha_r_input, df_r) # Absolute for comparison later
+             t_crit_summary = stats.t.ppf(1 - alpha_r_input, df_r) if df_r > 0 else float('nan')
         
         r_crit_summary = float('nan')
-        if not np.isnan(t_crit_summary) and (t_crit_summary**2 + df_r) != 0:
+        if not np.isnan(t_crit_summary) and df_r > 0 and (t_crit_summary**2 + df_r) != 0:
             r_crit_summary = math.sqrt(t_crit_summary**2 / (t_crit_summary**2 + df_r))
         
         crit_r_display_summary = format_value_for_display(r_crit_summary, decimals=4)
@@ -1864,7 +1876,7 @@ def tab_critical_r():
                 decision_crit_r = test_stat_r > r_crit_summary
                 comparison_crit_str_r = f"{test_stat_r:.3f} {' > ' if decision_crit_r else ' ≤ '} r_crit ({format_value_for_display(r_crit_summary, decimals=4)})"
             else: # One-tailed (negative, ρ < 0)
-                decision_crit_r = test_stat_r < -r_crit_summary # Compare with negative critical r
+                decision_crit_r = test_stat_r < -r_crit_summary 
                 comparison_crit_str_r = f"{test_stat_r:.3f} {' < ' if decision_crit_r else ' ≥ '} -r_crit (-{format_value_for_display(r_crit_summary, decimals=4)})"
         
         decision_p_alpha_r = p_val_r < alpha_r_input if not np.isnan(p_val_r) else False
