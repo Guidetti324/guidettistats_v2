@@ -48,10 +48,12 @@ def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
         for option in all_df_options:
             if option == 'z (∞)':
                 comparable_options.append(float('inf'))
-            elif isinstance(option, (int, float)) or (isinstance(option, str) and str(option).replace('.', '', 1).replace('-', '', 1).isdigit()): # Allow negative numbers
+            # Check if option can be converted to float, including negative numbers and decimals
+            elif isinstance(option, (int, float)) or \
+                 (isinstance(option, str) and option.replace('.', '', 1).replace('-', '', 1).isdigit()):
                 comparable_options.append(float(option))
-            else: 
-                comparable_options.append(float('-inf')) # Should not be reached if all_df_options are well-formed
+            else: # If not numeric-like or 'z (∞)', assign a value that won't match easily
+                comparable_options.append(float('-inf')) 
 
         for i, option_val_numeric in enumerate(comparable_options):
             diff = abs(option_val_numeric - temp_selected_df)
@@ -66,9 +68,9 @@ def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
                 try:
                     closest_idx = all_df_options.index(selected_df_val)
                 except ValueError: 
-                    return all_df_options[:window_size*2+1]
+                    return all_df_options[:min(len(all_df_options), window_size*2+1)]
             else: 
-                return all_df_options[:window_size*2+1]
+                return all_df_options[:min(len(all_df_options), window_size*2+1)]
 
         start_idx = max(0, closest_idx - window_size)
         end_idx = min(len(all_df_options), closest_idx + window_size + 1)
@@ -819,24 +821,73 @@ def tab_mann_whitney_u():
         ax_mw.axvline(z_calc_mw, color='green', linestyle='-', lw=2, label=f'Approx. z_calc = {z_calc_mw:.3f}')
         ax_mw.set_title('Normal Approximation for Mann-Whitney U'); ax_mw.legend(); ax_mw.grid(True); st.pyplot(fig_mw)
 
-        st.subheader("Critical z-Values (Upper Tail) for Normal Approximation")
-        table_alpha_cols_z_crit = [0.10, 0.05, 0.025, 0.01, 0.005]
-        z_crit_table_rows = [{'Distribution': 'z (Standard Normal)'}]
-        for alpha_c in table_alpha_cols_z_crit:
-            z_crit_table_rows[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
-        df_z_crit_table_mw = pd.DataFrame(z_crit_table_rows).set_index('Distribution')
+        st.subheader("Standard Normal Table: Cumulative P(Z < z)")
+        st.markdown("This table shows the area to the left of a given z-score. The z-critical value (derived from your alpha and tail selection) is used for highlighting.")
         
-        def style_z_crit_table_mw(df_to_style):
-            style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-            target_alpha_for_col = alpha_mw
-            if tail_mw == "Two-tailed": target_alpha_for_col = alpha_mw / 2.0
-            closest_alpha_col = min(table_alpha_cols_z_crit, key=lambda x: abs(x - target_alpha_for_col))
-            highlight_col = f"α = {closest_alpha_col:.3f}"
-            if highlight_col in df_to_style.columns:
-                style.loc[:, highlight_col] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
-            return style
-        st.markdown(df_z_crit_table_mw.style.apply(style_z_crit_table_mw, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption("Compare your calculated z-statistic to these critical z-values.")
+        z_crit_for_table_mw = crit_z_upper_mw_plot if tail_mw == "One-tailed (right)" else (crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None and tail_mw == "Two-tailed" else (crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None else 0.0) )
+        if np.isnan(z_crit_for_table_mw): z_crit_for_table_mw = 0.0
+
+
+        all_z_row_labels_mw = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
+        z_col_labels_str_mw = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
+        
+        z_target_for_table_row_numeric_mw = round(z_crit_for_table_mw, 1) 
+
+        try:
+            closest_row_idx_mw = min(range(len(all_z_row_labels_mw)), key=lambda i: abs(float(all_z_row_labels_mw[i]) - z_target_for_table_row_numeric_mw))
+        except ValueError: 
+            closest_row_idx_mw = len(all_z_row_labels_mw) // 2
+
+        window_size_z_mw = 5
+        start_idx_z_mw = max(0, closest_row_idx_mw - window_size_z_mw)
+        end_idx_z_mw = min(len(all_z_row_labels_mw), closest_row_idx_mw + window_size_z_mw + 1)
+        z_table_display_rows_str_mw = all_z_row_labels_mw[start_idx_z_mw:end_idx_z_mw]
+
+        table_data_z_lookup_mw = []
+        for z_r_str_idx in z_table_display_rows_str_mw:
+            z_r_val = float(z_r_str_idx)
+            row = { 'z': z_r_str_idx } 
+            for z_c_str_idx in z_col_labels_str_mw:
+                z_c_val = float(z_c_str_idx)
+                current_z_val = round(z_r_val + z_c_val, 2)
+                prob = stats.norm.cdf(current_z_val)
+                row[z_c_str_idx] = format_value_for_display(prob, decimals=4)
+            table_data_z_lookup_mw.append(row)
+        
+        df_z_lookup_table_mw = pd.DataFrame(table_data_z_lookup_mw).set_index('z')
+
+        def style_z_lookup_table_mw(df_to_style): # Reusing z-table styling logic
+            data = df_to_style 
+            style_df = pd.DataFrame('', index=data.index, columns=data.columns)
+            z_crit_val_to_highlight = z_crit_for_table_mw
+            try:
+                z_target_base_numeric = round(z_crit_val_to_highlight,1) 
+                actual_row_labels_float = [float(label) for label in data.index]
+                closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
+                highlight_row_label = f"{closest_row_float_val:.1f}"
+
+                z_target_second_decimal_part = round(abs(z_crit_val_to_highlight - closest_row_float_val), 2) 
+                actual_col_labels_float = [float(col_str) for col_str in data.columns]
+                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_target_second_decimal_part))
+                highlight_col_label = f"{closest_col_float_val:.2f}"
+
+                if highlight_row_label in style_df.index:
+                    for col_name_iter in style_df.columns: 
+                        style_df.loc[highlight_row_label, col_name_iter] = 'background-color: lightblue;'
+                if highlight_col_label in style_df.columns:
+                    for r_idx_iter in style_df.index: 
+                        current_style = style_df.loc[r_idx_iter, highlight_col_label]
+                        style_df.loc[r_idx_iter, highlight_col_label] = (current_style + ';' if current_style and not current_style.endswith(';') else current_style) + 'background-color: lightgreen;'
+                if highlight_row_label in style_df.index and highlight_col_label in style_df.columns:
+                    current_cell_style = style_df.loc[highlight_row_label, highlight_col_label]
+                    style_df.loc[highlight_row_label, highlight_col_label] = (current_cell_style + ';' if current_cell_style and not current_cell_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
+            except Exception: pass 
+            return style_df
+        
+        st.markdown(df_z_lookup_table_mw.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
+                                                               {'selector': 'td', 'props': [('text-align', 'center')]}])
+                                     .apply(style_z_lookup_table_mw, axis=None).to_html(), unsafe_allow_html=True)
+        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_mw:.3f} and tail selection.")
 
 
     with col2: 
@@ -944,24 +995,72 @@ def tab_wilcoxon_t():
         ax_w.axvline(z_calc_w, color='green', linestyle='-', lw=2, label=f'Approx. z_calc = {z_calc_w:.3f}')
         ax_w.set_title('Normal Approx. for Wilcoxon T: Critical z Region(s)'); ax_w.legend(); ax_w.grid(True); st.pyplot(fig_w)
 
-        st.subheader("Critical z-Values (Upper Tail) for Normal Approximation")
-        table_alpha_cols_z_crit_w = [0.10, 0.05, 0.025, 0.01, 0.005]
-        z_crit_table_rows_w = [{'Distribution': 'z (Standard Normal)'}]
-        for alpha_c in table_alpha_cols_z_crit_w:
-            z_crit_table_rows_w[0][f"α = {alpha_c:.3f}"] = format_value_for_display(stats.norm.ppf(1-alpha_c))
-        df_z_crit_table_w = pd.DataFrame(z_crit_table_rows_w).set_index('Distribution')
+        st.subheader("Standard Normal Table: Cumulative P(Z < z)")
+        st.markdown("This table shows the area to the left of a given z-score. The z-critical value (derived from your alpha and tail selection) is used for highlighting.")
+
+        z_crit_for_table_w = crit_z_upper_w_plot if tail_w == "One-tailed (right)" else (crit_z_upper_w_plot if crit_z_upper_w_plot is not None and tail_w == "Two-tailed" else (crit_z_lower_w_plot if crit_z_lower_w_plot is not None else 0.0) )
+        if np.isnan(z_crit_for_table_w): z_crit_for_table_w = 0.0
         
-        def style_z_crit_table_w(df_to_style): 
-            style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
-            target_alpha_for_col = alpha_w
-            if tail_w == "Two-tailed": target_alpha_for_col = alpha_w / 2.0
-            closest_alpha_col = min(table_alpha_cols_z_crit_w, key=lambda x: abs(x - target_alpha_for_col))
-            highlight_col = f"α = {closest_alpha_col:.3f}"
-            if highlight_col in df_to_style.columns:
-                style.loc[:, highlight_col] = 'background-color: lightgreen; font-weight: bold; border: 2px solid red;'
-            return style
-        st.markdown(df_z_crit_table_w.style.apply(style_z_crit_table_w, axis=None).to_html(), unsafe_allow_html=True)
-        st.caption("Compare your calculated z-statistic to these critical z-values.")
+        all_z_row_labels_w = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
+        z_col_labels_str_w = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
+        
+        z_target_for_table_row_numeric_w = round(z_crit_for_table_w, 1) 
+
+        try:
+            closest_row_idx_w = min(range(len(all_z_row_labels_w)), key=lambda i: abs(float(all_z_row_labels_w[i]) - z_target_for_table_row_numeric_w))
+        except ValueError: 
+            closest_row_idx_w = len(all_z_row_labels_w) // 2
+
+        window_size_z_w = 5
+        start_idx_z_w = max(0, closest_row_idx_w - window_size_z_w)
+        end_idx_z_w = min(len(all_z_row_labels_w), closest_row_idx_w + window_size_z_w + 1)
+        z_table_display_rows_str_w = all_z_row_labels_w[start_idx_z_w:end_idx_z_w]
+
+        table_data_z_lookup_w = []
+        for z_r_str_idx in z_table_display_rows_str_w:
+            z_r_val = float(z_r_str_idx)
+            row = { 'z': z_r_str_idx } 
+            for z_c_str_idx in z_col_labels_str_w:
+                z_c_val = float(z_c_str_idx)
+                current_z_val = round(z_r_val + z_c_val, 2)
+                prob = stats.norm.cdf(current_z_val)
+                row[z_c_str_idx] = format_value_for_display(prob, decimals=4)
+            table_data_z_lookup_w.append(row)
+        
+        df_z_lookup_table_w = pd.DataFrame(table_data_z_lookup_w).set_index('z')
+
+        def style_z_lookup_table_w(df_to_style): # Reusing z-table styling logic
+            data = df_to_style 
+            style_df = pd.DataFrame('', index=data.index, columns=data.columns)
+            z_crit_val_to_highlight = z_crit_for_table_w
+            try:
+                z_target_base_numeric = round(z_crit_val_to_highlight,1) 
+                actual_row_labels_float = [float(label) for label in data.index]
+                closest_row_float_val = min(actual_row_labels_float, key=lambda x_val: abs(x_val - z_target_base_numeric))
+                highlight_row_label = f"{closest_row_float_val:.1f}"
+
+                z_target_second_decimal_part = round(abs(z_crit_val_to_highlight - closest_row_float_val), 2) 
+                actual_col_labels_float = [float(col_str) for col_str in data.columns]
+                closest_col_float_val = min(actual_col_labels_float, key=lambda x_val: abs(x_val - z_target_second_decimal_part))
+                highlight_col_label = f"{closest_col_float_val:.2f}"
+
+                if highlight_row_label in style_df.index:
+                    for col_name_iter in style_df.columns: 
+                        style_df.loc[highlight_row_label, col_name_iter] = 'background-color: lightblue;'
+                if highlight_col_label in style_df.columns:
+                    for r_idx_iter in style_df.index: 
+                        current_style = style_df.loc[r_idx_iter, highlight_col_label]
+                        style_df.loc[r_idx_iter, highlight_col_label] = (current_style + ';' if current_style and not current_style.endswith(';') else current_style) + 'background-color: lightgreen;'
+                if highlight_row_label in style_df.index and highlight_col_label in style_df.columns:
+                    current_cell_style = style_df.loc[highlight_row_label, highlight_col_label]
+                    style_df.loc[highlight_row_label, highlight_col_label] = (current_cell_style + ';' if current_cell_style and not current_cell_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
+            except Exception: pass 
+            return style_df
+        
+        st.markdown(df_z_lookup_table_w.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
+                                                               {'selector': 'td', 'props': [('text-align', 'center')]}])
+                                     .apply(style_z_lookup_table_w, axis=None).to_html(), unsafe_allow_html=True)
+        st.caption(f"Table shows P(Z < z). Highlighted cell, row, and column are closest to the z-critical value derived from α={alpha_w:.3f} and tail selection.")
 
 
     with col2: # Summary for Wilcoxon T
@@ -1072,7 +1171,7 @@ def tab_binomial_test():
                     return ['background-color: yellow'] * len(row)
                 return [''] * len(row)
             st.markdown(df_table_b.style.apply(highlight_k_row_b, axis=1).to_html(), unsafe_allow_html=True)
-            st.caption(f"Table shows probabilities around k={k_success_b}. Highlighted row is your observed k.")
+            st.caption(f"Table shows probabilities around k={k_success_b}. Highlighted row is your observed k. Column highlighting for alpha is not applicable to this table's structure.")
         else:
             st.info("Not enough range to display table snippet (e.g., n is very small).")
         st.markdown("""**Table Interpretation Note:** This table helps understand probabilities around the observed k. Critical regions for binomial tests are based on these cumulative probabilities compared to α.""")
@@ -1142,8 +1241,8 @@ def tab_tukey_hsd():
         **Important Note on Approximation:** This tab uses a **standard normal (z) distribution** to approximate 
         critical values and p-values. Your input 'Calculated Statistic' will be treated as a z-score for this comparison.
         This is a **significant simplification** and does **not** represent a true Tukey HSD test, which requires the 
-        Studentized Range (q) distribution and the `statsmodels` library. 
-        For accurate Tukey HSD results, ensure `statsmodels` is installed and use statistical software that implements the Studentized Range distribution.
+        Studentized Range (q) distribution. For accurate Tukey HSD results, please use statistical software 
+        that implements the Studentized Range distribution (e.g., `statsmodels` in Python, or R), and ensure `statsmodels` is correctly installed in your environment.
         """)
 
         st.subheader("Standard Normal (z) Distribution Plot")
@@ -1184,11 +1283,13 @@ def tab_tukey_hsd():
         ax_tukey_approx.legend(); ax_tukey_approx.grid(True); st.pyplot(fig_tukey_approx)
 
         st.subheader("Standard Normal Table: Cumulative P(Z < z)")
-        st.markdown("This table shows the area to the left of a given z-score. The critical z-value (derived from your alpha and tail selection) is used for highlighting.")
+        st.markdown("This table shows the area to the left of a given z-score. The z-critical value (derived from your alpha and tail selection) is used for highlighting.")
 
-        z_crit_for_table_tukey = z_crit_upper_tukey_approx if tukey_tail_selection_approx == "One-tailed (right)" else (z_crit_upper_tukey_approx if z_crit_upper_tukey_approx is not None else 0.0)
-        if tukey_tail_selection_approx == "Two-tailed" and (z_crit_upper_tukey_approx is None or np.isnan(z_crit_upper_tukey_approx)):
-            z_crit_for_table_tukey = 0.0 # Fallback if somehow crit value is NaN
+        z_crit_for_table_tukey = z_crit_upper_tukey_approx if tukey_tail_selection_approx == "One-tailed (right)" else \
+                                (z_crit_upper_tukey_approx if z_crit_upper_tukey_approx is not None and tukey_tail_selection_approx == "Two-tailed" else \
+                                (z_crit_lower_tukey_approx if z_crit_lower_tukey_approx is not None else 0.0) ) # Use lower for two-tailed if upper is None (should not happen)
+        if np.isnan(z_crit_for_table_tukey): z_crit_for_table_tukey = 0.0
+
 
         all_z_row_labels_tukey = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
         z_col_labels_str_tukey = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
