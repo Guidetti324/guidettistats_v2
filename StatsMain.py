@@ -5,7 +5,7 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 from io import StringIO # For reading CSV string
 import itertools
-# from scipy.special import comb # Not using for exact Mann-Whitney in this version
+import math # Added for sqrt in r-critical calculation
 
 # Helper function to create APA style p-value string
 def apa_p_value(p_val):
@@ -1683,6 +1683,205 @@ def tab_friedman_test():
             A Friedman test indicated that there was {'' if decision_p_alpha_fr else 'not '}a statistically significant difference in medians across the k={k_conditions_fr} conditions for n={n_blocks_fr} blocks, {apa_Q_stat}, {apa_p_val_calc_fr_str}. The null hypothesis was {'rejected' if decision_p_alpha_fr else 'not rejected'} at α = {alpha_fr:.2f}.
         """, unsafe_allow_html=True)
 
+# --- Tab 11: Critical r Table (Pearson Correlation) ---
+def tab_critical_r():
+    st.header("Critical r Value Explorer (Pearson Correlation)")
+    col1, col2 = st.columns([2, 1.5])
+
+    with col1:
+        st.subheader("Inputs")
+        alpha_r_input = st.number_input("Alpha (α)", min_value=0.00000001, max_value=0.5, value=0.05, step=0.00000001, format="%.8f", key="alpha_r_input")
+        n_r = st.number_input("Sample Size (n, number of pairs)", min_value=3, value=20, step=1, key="n_r_input")
+        test_stat_r = st.number_input("Your Calculated r-statistic", min_value=-1.0, max_value=1.0, value=0.0, step=0.01, format="%.3f", key="test_stat_r_input")
+        tail_r = st.radio("Tail Selection (H₁)", 
+                          ("Two-tailed (ρ ≠ 0)", "One-tailed (positive, ρ > 0)", "One-tailed (negative, ρ < 0)"), 
+                          key="tail_r_radio")
+
+        df_r = n_r - 2
+        if df_r <= 0:
+            st.error("Sample size (n) must be greater than 2 to calculate degrees of freedom for correlation.")
+            st.stop()
+        
+        st.markdown(f"**Degrees of Freedom (df)** = n - 2 = **{df_r}**")
+
+        # Convert r to t for plotting and p-value
+        t_observed_r = float('nan')
+        if abs(test_stat_r) < 1: # Avoid division by zero or sqrt of negative
+            try:
+                t_observed_r = test_stat_r * math.sqrt(df_r / (1 - test_stat_r**2))
+            except ZeroDivisionError: # Should be caught by abs(test_stat_r) < 1 but as a safeguard
+                 t_observed_r = float('inf') if test_stat_r != 0 else 0.0
+
+        st.markdown(f"**Observed r converted to t-statistic (for plot & p-value):** {format_value_for_display(t_observed_r)}")
+
+
+        st.subheader(f"t-Distribution Plot (df={df_r}) for r-to-t Transformed Value")
+        fig_r, ax_r = plt.subplots(figsize=(8,5))
+        
+        dist_label_plot_r = f't-distribution (df={df_r})'
+        crit_func_ppf_plot_r = lambda q_val: stats.t.ppf(q_val, df_r)
+        crit_func_pdf_plot_r = lambda x_val: stats.t.pdf(x_val, df_r)
+        
+        plot_min_r_t = min(crit_func_ppf_plot_r(0.00000001), t_observed_r - 3 if not np.isnan(t_observed_r) else -3, -4.0)
+        plot_max_r_t = max(crit_func_ppf_plot_r(0.99999999), t_observed_r + 3 if not np.isnan(t_observed_r) else 3, 4.0)
+        if not np.isnan(t_observed_r) and abs(t_observed_r) > 4 and abs(t_observed_r) > plot_max_r_t * 0.8 : 
+            plot_min_r_t = min(plot_min_r_t, t_observed_r -1)
+            plot_max_r_t = max(plot_max_r_t, t_observed_r +1)
+
+        x_r_t_plot = np.linspace(plot_min_r_t, plot_max_r_t, 500)
+        y_r_t_plot = crit_func_pdf_plot_r(x_r_t_plot)
+        ax_r.plot(x_r_t_plot, y_r_t_plot, 'b-', lw=2, label=dist_label_plot_r)
+
+        crit_t_upper_r_plot, crit_t_lower_r_plot = None, None
+        alpha_for_plot_r = alpha_r_input
+
+        if tail_r == "Two-tailed (ρ ≠ 0)":
+            crit_t_upper_r_plot = crit_func_ppf_plot_r(1 - alpha_for_plot_r / 2)
+            crit_t_lower_r_plot = crit_func_ppf_plot_r(alpha_for_plot_r / 2)
+            if crit_t_upper_r_plot is not None and not np.isnan(crit_t_upper_r_plot):
+                 x_fill_upper = np.linspace(crit_t_upper_r_plot, plot_max_r_t, 100)
+                 ax_r.fill_between(x_fill_upper, crit_func_pdf_plot_r(x_fill_upper), color='red', alpha=0.5, label=f'α/2 = {alpha_for_plot_r/2:.8f}')
+                 ax_r.axvline(crit_t_upper_r_plot, color='red', linestyle='--', lw=1)
+            if crit_t_lower_r_plot is not None and not np.isnan(crit_t_lower_r_plot):
+                 x_fill_lower = np.linspace(plot_min_r_t, crit_t_lower_r_plot, 100)
+                 ax_r.fill_between(x_fill_lower, crit_func_pdf_plot_r(x_fill_lower), color='red', alpha=0.5)
+                 ax_r.axvline(crit_t_lower_r_plot, color='red', linestyle='--', lw=1)
+        elif tail_r == "One-tailed (positive, ρ > 0)":
+            crit_t_upper_r_plot = crit_func_ppf_plot_r(1 - alpha_for_plot_r)
+            if crit_t_upper_r_plot is not None and not np.isnan(crit_t_upper_r_plot):
+                x_fill_upper = np.linspace(crit_t_upper_r_plot, plot_max_r_t, 100)
+                ax_r.fill_between(x_fill_upper, crit_func_pdf_plot_r(x_fill_upper), color='red', alpha=0.5, label=f'α = {alpha_for_plot_r:.8f}')
+                ax_r.axvline(crit_t_upper_r_plot, color='red', linestyle='--', lw=1)
+        else: # One-tailed (negative, ρ < 0)
+            crit_t_lower_r_plot = crit_func_ppf_plot_r(alpha_for_plot_r)
+            if crit_t_lower_r_plot is not None and not np.isnan(crit_t_lower_r_plot):
+                x_fill_lower = np.linspace(plot_min_r_t, crit_t_lower_r_plot, 100)
+                ax_r.fill_between(x_fill_lower, crit_func_pdf_plot_r(x_fill_lower), color='red', alpha=0.5, label=f'α = {alpha_for_plot_r:.8f}')
+                ax_r.axvline(crit_t_lower_r_plot, color='red', linestyle='--', lw=1)
+        
+        if not np.isnan(t_observed_r):
+            ax_r.axvline(t_observed_r, color='green', linestyle='-', lw=2, label=f'Observed t (from r) = {t_observed_r:.3f}')
+        
+        ax_r.set_title(f't-Distribution for r (df={df_r})')
+        ax_r.set_xlabel('t-value')
+        ax_r.set_ylabel('Probability Density')
+        ax_r.legend(); ax_r.grid(True); st.pyplot(fig_r)
+
+        st.subheader("Critical r-Values Table (Two-tailed)")
+        all_df_r_options = list(range(1, 101)) + [120, 150, 200, 500, 1000] # More df options for r table
+        table_df_r_window = get_dynamic_df_window(all_df_r_options, df_r, window_size=5)
+        table_alpha_r_cols = [0.10, 0.05, 0.02, 0.01, 0.001] # Standard alphas for r tables (usually two-tailed)
+
+        r_table_rows = []
+        for df_iter in table_df_r_window:
+            df_iter_calc = int(df_iter)
+            if df_iter_calc <= 0: continue # df must be > 0
+            row_data = {'df (n-2)': str(df_iter_calc)}
+            for alpha_col in table_alpha_r_cols:
+                t_crit_cell = stats.t.ppf(1 - alpha_col / 2, df_iter_calc) # t for two-tailed
+                if t_crit_cell**2 + df_iter_calc == 0: # Avoid division by zero
+                    r_crit_cell = float('nan')
+                else:
+                    r_crit_cell = math.sqrt(t_crit_cell**2 / (t_crit_cell**2 + df_iter_calc))
+                row_data[f"α (2-tail) = {alpha_col:.3f}"] = format_value_for_display(r_crit_cell, decimals=4)
+            r_table_rows.append(row_data)
+        
+        df_r_table = pd.DataFrame(r_table_rows).set_index('df (n-2)')
+
+        def style_r_table(df_to_style):
+            style = pd.DataFrame('', index=df_to_style.index, columns=df_to_style.columns)
+            selected_df_r_str = str(df_r)
+
+            if selected_df_r_str in df_to_style.index: 
+                style.loc[selected_df_r_str, :] = 'background-color: lightblue;'
+            
+            # Highlight column closest to user's alpha (considering two-tailed for this table)
+            target_alpha_for_col_highlight_r = alpha_r_input
+            if tail_r != "Two-tailed (ρ ≠ 0)": # For one-tailed, table shows two-tailed alphas, so compare with 2*alpha_input
+                target_alpha_for_col_highlight_r = alpha_r_input * 2
+            
+            closest_alpha_col_val_r = min(table_alpha_r_cols, key=lambda x: abs(x - target_alpha_for_col_highlight_r))
+            highlight_col_name_r = f"α (2-tail) = {closest_alpha_col_val_r:.3f}"
+
+            if highlight_col_name_r in df_to_style.columns:
+                for r_idx in df_to_style.index:
+                     current_r_style = style.loc[r_idx, highlight_col_name_r]
+                     style.loc[r_idx, highlight_col_name_r] = (current_r_style + ';' if current_r_style and not current_r_style.endswith(';') else current_r_style) + 'background-color: lightgreen;'
+                if selected_df_r_str in df_to_style.index: 
+                    current_c_style = style.loc[selected_df_r_str, highlight_col_name_r]
+                    style.loc[selected_df_r_str, highlight_col_name_r] = (current_c_style + ';' if current_c_style and not current_c_style.endswith(';') else '') + 'font-weight: bold; border: 2px solid red; background-color: yellow;'
+            return style
+        
+        if not df_r_table.empty:
+            st.markdown(df_r_table.style.set_table_styles([{'selector': 'th', 'props': [('text-align', 'center')]},
+                                                          {'selector': 'td', 'props': [('text-align', 'center')]}])
+                                         .apply(style_r_table, axis=None).to_html(), unsafe_allow_html=True)
+            st.caption(f"Table shows two-tailed critical r-values. Highlighted for df={df_r} and α (2-tail) closest to your test's equivalent two-tailed α.")
+        else:
+            st.warning("Critical r-value table could not be generated for the current df.")
+        st.markdown("""
+        **Table Interpretation Note:**
+        * This table displays critical r-values for **two-tailed tests**.
+        * For **one-tailed tests**, you can use this table but adjust the alpha level. For example, a one-tailed test at α=0.05 uses the critical r from the α=0.10 (two-tailed) column.
+        """)
+
+    with col2:
+        st.subheader("Significance Test for Pearson's r")
+        
+        p_val_r = float('nan')
+        if not np.isnan(t_observed_r) and df_r > 0:
+            if tail_r == "Two-tailed (ρ ≠ 0)":
+                p_val_r = 2 * stats.t.sf(abs(t_observed_r), df_r)
+            elif tail_r == "One-tailed (positive, ρ > 0)":
+                p_val_r = stats.t.sf(t_observed_r, df_r)
+            else: # One-tailed (negative, ρ < 0)
+                p_val_r = stats.t.cdf(t_observed_r, df_r)
+            p_val_r = min(p_val_r, 1.0) if not np.isnan(p_val_r) else float('nan')
+
+        # Calculate precise critical r for summary
+        t_crit_summary = float('nan')
+        if tail_r == "Two-tailed (ρ ≠ 0)":
+            t_crit_summary = stats.t.ppf(1 - alpha_r_input / 2, df_r)
+        elif tail_r == "One-tailed (positive, ρ > 0)" or tail_r == "One-tailed (negative, ρ < 0)":
+             t_crit_summary = stats.t.ppf(1 - alpha_r_input, df_r) # Absolute for comparison later
+        
+        r_crit_summary = float('nan')
+        if not np.isnan(t_crit_summary) and (t_crit_summary**2 + df_r) != 0:
+            r_crit_summary = math.sqrt(t_crit_summary**2 / (t_crit_summary**2 + df_r))
+        
+        crit_r_display_summary = format_value_for_display(r_crit_summary, decimals=4)
+        if tail_r == "Two-tailed (ρ ≠ 0)":
+            crit_r_display_summary = f"±{crit_r_display_summary}"
+
+
+        decision_crit_r = False
+        comparison_crit_str_r = f"|{test_stat_r:.3f}| vs |{format_value_for_display(r_crit_summary, decimals=4)}|"
+        if not np.isnan(r_crit_summary):
+            if tail_r == "Two-tailed (ρ ≠ 0)":
+                decision_crit_r = abs(test_stat_r) > r_crit_summary
+                comparison_crit_str_r = f"|{test_stat_r:.3f}| ({abs(test_stat_r):.3f}) {' > ' if decision_crit_r else ' ≤ '} |r_crit| ({format_value_for_display(r_crit_summary, decimals=4)})"
+            elif tail_r == "One-tailed (positive, ρ > 0)":
+                decision_crit_r = test_stat_r > r_crit_summary
+                comparison_crit_str_r = f"{test_stat_r:.3f} {' > ' if decision_crit_r else ' ≤ '} r_crit ({format_value_for_display(r_crit_summary, decimals=4)})"
+            else: # One-tailed (negative, ρ < 0)
+                decision_crit_r = test_stat_r < -r_crit_summary # Compare with negative critical r
+                comparison_crit_str_r = f"{test_stat_r:.3f} {' < ' if decision_crit_r else ' ≥ '} -r_crit (-{format_value_for_display(r_crit_summary, decimals=4)})"
+        
+        decision_p_alpha_r = p_val_r < alpha_r_input if not np.isnan(p_val_r) else False
+        
+        st.markdown(f"""
+        1.  **Critical r-value ({tail_r})**: {crit_r_display_summary}
+            * *Significance level (α)*: {alpha_r_input:.8f}
+            * *Degrees of freedom (df = n-2)*: {df_r}
+        2.  **Calculated r-statistic**: {test_stat_r:.3f} (corresponds to t = {format_value_for_display(t_observed_r)})
+            * *Calculated p-value*: {format_value_for_display(p_val_r, decimals=4)} ({apa_p_value(p_val_r)})
+        3.  **Decision (Critical Value Method)**: H₀ is **{'rejected' if decision_crit_r else 'not rejected'}**.
+            * *Reason*: {comparison_crit_str_r}.
+        4.  **Decision (p-value Method)**: H₀ is **{'rejected' if decision_p_alpha_r else 'not rejected'}**.
+            * *Reason*: {apa_p_value(p_val_r)} is {'less than' if decision_p_alpha_r else 'not less than'} α ({alpha_r_input:.8f}).
+        5.  **APA 7 Style Report**:
+            A Pearson correlation coefficient was computed to assess the linear relationship between the two variables. The correlation was found to be *r*({df_r}) = {test_stat_r:.2f}, {apa_p_value(p_val_r)}. The null hypothesis was {'rejected' if decision_p_alpha_r else 'not rejected'} at the α = {alpha_r_input:.2f} level.
+        """)
 
 # --- Main app ---
 def main():
@@ -1698,7 +1897,7 @@ def main():
     tab_names = [
         "t-Distribution", "z-Distribution", "F-Distribution", "Chi-square (χ²)",
         "Mann-Whitney U", "Wilcoxon Signed-Rank T", "Binomial Test",
-        "Tukey HSD", "Kruskal-Wallis H", "Friedman Test"
+        "Tukey HSD", "Kruskal-Wallis H", "Friedman Test", "Critical r Table"
     ]
     
     tabs = st.tabs(tab_names)
@@ -1723,6 +1922,9 @@ def main():
         tab_kruskal_wallis()
     with tabs[9]:
         tab_friedman_test()
+    with tabs[10]:
+        tab_critical_r()
+
 
 if __name__ == "__main__":
     main()
