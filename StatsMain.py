@@ -1120,98 +1120,96 @@ def tab_binomial_test():
         """)
 
 
-# --- Tab 8: Tukey HSD ---
+# --- Tab 8: Tukey HSD (Simplified Normal Approximation) ---
 def tab_tukey_hsd():
-    st.header("Tukey HSD (Normal Approximation)") # Title changed to reflect approximation
+    st.header("Tukey HSD (Simplified Normal Approximation)")
     col1, col2 = st.columns([2, 1.5])
     
     with col1:
-        st.subheader("Inputs")
-        alpha_tukey = st.number_input("Alpha (α)", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_tukey_hsd_input")
-        k_tukey_selected = st.number_input("Number of Groups (k) (for context)", min_value=2, value=3, step=1, key="k_tukey_selectbox") 
-        df_error_tukey_selected = st.number_input("Degrees of Freedom for Error (df_error) (for context)", min_value=1, value=20, step=1, key="df_error_tukey_selectbox")
+        st.subheader("Inputs for Normal Approximation")
+        alpha_tukey = st.number_input("Alpha (α) for z-comparison", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_tukey_approx_input")
+        # k_tukey_selected and df_error_tukey_selected are for context only in APA report
+        k_tukey_selected = st.number_input("Number of Groups (k) (for context)", min_value=2, value=3, step=1, key="k_tukey_context_selectbox") 
+        df_error_tukey_selected = st.number_input("Degrees of Freedom for Error (df_error) (for context)", min_value=1, value=20, step=1, key="df_error_context_selectbox")
         
-        test_stat_tukey_q = st.number_input("Your Calculated q-statistic (will be treated as z)", value=1.0, format="%.3f", min_value=0.0, key="test_stat_tukey_q_input")
+        test_stat_tukey_q_as_z = st.number_input("Your Calculated Statistic (q or other, treated as z-score)", value=1.0, format="%.3f", key="test_stat_tukey_q_as_z_input")
         
-        tukey_tail_selection = st.radio("Tail Selection for z-comparison", 
+        tukey_tail_selection_approx = st.radio("Tail Selection for z-comparison", 
                                         ("Two-tailed", "One-tailed (right)"), 
-                                        key="tukey_tail_z_radio", index=1)
+                                        key="tukey_tail_z_approx_radio", index=1)
 
         st.warning("""
-        **Important Note on Approximation:** This tab now uses a **standard normal (z) distribution** to approximate 
-        critical values and p-values for the Tukey HSD comparison. Your input 'q-statistic' will be treated as a z-score.
-        This is a **significant simplification** and does **not** represent a true Tukey HSD test, which uses the 
-        Studentized Range (q) distribution. For accurate Tukey HSD results, please use statistical software 
-        that implements the Studentized Range distribution (e.g., `statsmodels` in Python, or R).
+        **Important Note on Approximation:** This tab uses a **standard normal (z) distribution** to approximate 
+        critical values and p-values. Your input 'Calculated Statistic' will be treated as a z-score for this comparison.
+        This is a **significant simplification** and does **not** represent a true Tukey HSD test, which requires the 
+        Studentized Range (q) distribution and the `statsmodels` library. 
+        For accurate Tukey HSD results, ensure `statsmodels` is installed and use statistical software that implements the Studentized Range distribution.
         """)
 
-        st.subheader("Conceptual Distribution Plot (Standard Normal z)")
-        fig_tukey, ax_tukey = plt.subplots(figsize=(8,5))
+        st.subheader("Standard Normal (z) Distribution Plot")
+        fig_tukey_approx, ax_tukey_approx = plt.subplots(figsize=(8,5))
         
-        z_crit_upper_tukey, z_crit_lower_tukey = None, None
-        alpha_for_plot_tukey = alpha_tukey
-
-        if tukey_tail_selection == "Two-tailed":
-            z_crit_upper_tukey = stats.norm.ppf(1 - alpha_for_plot_tukey / 2)
-            z_crit_lower_tukey = stats.norm.ppf(alpha_for_plot_tukey / 2)
+        z_crit_upper_tukey_approx, z_crit_lower_tukey_approx = None, None
+        
+        if tukey_tail_selection_approx == "Two-tailed":
+            z_crit_upper_tukey_approx = stats.norm.ppf(1 - alpha_tukey / 2)
+            z_crit_lower_tukey_approx = stats.norm.ppf(alpha_tukey / 2)
         else: # One-tailed (right)
-            z_crit_upper_tukey = stats.norm.ppf(1 - alpha_for_plot_tukey)
+            z_crit_upper_tukey_approx = stats.norm.ppf(1 - alpha_tukey)
 
-        plot_min_z_tukey = min(stats.norm.ppf(0.001), test_stat_tukey_q - 2, -4.0)
-        plot_max_z_tukey = max(stats.norm.ppf(0.999), test_stat_tukey_q + 2, 4.0)
-        if abs(test_stat_tukey_q) > 3.5 : 
-             plot_min_z_tukey = min(plot_min_z_tukey, test_stat_tukey_q - 0.5)
-             plot_max_z_tukey = max(plot_max_z_tukey, test_stat_tukey_q + 0.5)
+        plot_min_z_tukey = min(stats.norm.ppf(0.001), test_stat_tukey_q_as_z - 2, -4.0)
+        plot_max_z_tukey = max(stats.norm.ppf(0.999), test_stat_tukey_q_as_z + 2, 4.0)
+        if abs(test_stat_tukey_q_as_z) > 3.5 : 
+             plot_min_z_tukey = min(plot_min_z_tukey, test_stat_tukey_q_as_z - 0.5)
+             plot_max_z_tukey = max(plot_max_z_tukey, test_stat_tukey_q_as_z + 0.5)
 
         x_z_tukey_plot = np.linspace(plot_min_z_tukey, plot_max_z_tukey, 500)
         y_z_tukey_plot = stats.norm.pdf(x_z_tukey_plot)
-        ax_tukey.plot(x_z_tukey_plot, y_z_tukey_plot, 'b-', lw=2, label='Standard Normal Distribution (z)')
+        ax_tukey_approx.plot(x_z_tukey_plot, y_z_tukey_plot, 'b-', lw=2, label='Standard Normal Distribution (z)')
 
-        if z_crit_upper_tukey is not None and not np.isnan(z_crit_upper_tukey):
-            x_fill_upper = np.linspace(z_crit_upper_tukey, plot_max_z_tukey, 100)
-            ax_tukey.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, 
-                                  label=f'Crit. Region (α={alpha_for_plot_tukey/2 if tukey_tail_selection == "Two-tailed" else alpha_for_plot_tukey:.3f})')
-            ax_tukey.axvline(z_crit_upper_tukey, color='red', linestyle='--', lw=1)
-        if z_crit_lower_tukey is not None and not np.isnan(z_crit_lower_tukey) and tukey_tail_selection == "Two-tailed":
-            x_fill_lower = np.linspace(plot_min_z_tukey, z_crit_lower_tukey, 100)
-            ax_tukey.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5)
-            ax_tukey.axvline(z_crit_lower_tukey, color='red', linestyle='--', lw=1)
+        if z_crit_upper_tukey_approx is not None and not np.isnan(z_crit_upper_tukey_approx):
+            x_fill_upper = np.linspace(z_crit_upper_tukey_approx, plot_max_z_tukey, 100)
+            ax_tukey_approx.fill_between(x_fill_upper, stats.norm.pdf(x_fill_upper), color='red', alpha=0.5, 
+                                  label=f'Crit. Region (α={alpha_tukey/2 if tukey_tail_selection_approx == "Two-tailed" else alpha_tukey:.3f})')
+            ax_tukey_approx.axvline(z_crit_upper_tukey_approx, color='red', linestyle='--', lw=1)
+        if z_crit_lower_tukey_approx is not None and not np.isnan(z_crit_lower_tukey_approx) and tukey_tail_selection_approx == "Two-tailed":
+            x_fill_lower = np.linspace(plot_min_z_tukey, z_crit_lower_tukey_approx, 100)
+            ax_tukey_approx.fill_between(x_fill_lower, stats.norm.pdf(x_fill_lower), color='red', alpha=0.5)
+            ax_tukey_approx.axvline(z_crit_lower_tukey_approx, color='red', linestyle='--', lw=1)
         
-        ax_tukey.axvline(test_stat_tukey_q, color='green', linestyle='-', lw=2, label=f'Input q-stat (as z) = {test_stat_tukey_q:.3f}')
-        ax_tukey.set_title(f'Standard Normal Distribution for q-statistic Approximation (α={alpha_tukey:.3f})')
-        ax_tukey.set_xlabel('Value (Treated as z-score)')
-        ax_tukey.set_ylabel('Probability Density')
-        ax_tukey.legend(); ax_tukey.grid(True); st.pyplot(fig_tukey)
+        ax_tukey_approx.axvline(test_stat_tukey_q_as_z, color='green', linestyle='-', lw=2, label=f'Input Stat (as z) = {test_stat_tukey_q_as_z:.3f}')
+        ax_tukey_approx.set_title(f'Standard Normal Distribution for Approximation (α={alpha_tukey:.3f})')
+        ax_tukey_approx.set_xlabel('Value (Treated as z-score)')
+        ax_tukey_approx.set_ylabel('Probability Density')
+        ax_tukey_approx.legend(); ax_tukey_approx.grid(True); st.pyplot(fig_tukey_approx)
 
         st.subheader("Standard Normal Table: Cumulative P(Z < z)")
         st.markdown("This table shows the area to the left of a given z-score. The critical z-value (derived from your alpha and tail selection) is used for highlighting.")
 
-        # Determine the z-critical value to center the table around
-        z_crit_for_table = z_crit_upper_tukey if tukey_tail_selection == "One-tailed (right)" else (z_crit_upper_tukey if z_crit_upper_tukey is not None else 0.0)
-        if tukey_tail_selection == "Two-tailed" and z_crit_upper_tukey is None: # Should not happen if alpha is valid
-            z_crit_for_table = 0.0
+        z_crit_for_table_tukey = z_crit_upper_tukey_approx if tukey_tail_selection_approx == "One-tailed (right)" else (z_crit_upper_tukey_approx if z_crit_upper_tukey_approx is not None else 0.0)
+        if tukey_tail_selection_approx == "Two-tailed" and (z_crit_upper_tukey_approx is None or np.isnan(z_crit_upper_tukey_approx)):
+            z_crit_for_table_tukey = 0.0 # Fallback if somehow crit value is NaN
 
-
-        all_z_row_labels = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
-        z_col_labels_str = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
+        all_z_row_labels_tukey = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
+        z_col_labels_str_tukey = [f"{val:.2f}" for val in np.round(np.arange(0.00, 0.10, 0.01), 2)]
         
-        z_target_for_table_row_numeric = round(z_crit_for_table if not np.isnan(z_crit_for_table) else 0.0, 1)
+        z_target_for_table_row_numeric_tukey = round(z_crit_for_table_tukey, 1) 
 
         try:
-            closest_row_idx = min(range(len(all_z_row_labels)), key=lambda i: abs(float(all_z_row_labels[i]) - z_target_for_table_row_numeric))
+            closest_row_idx_tukey = min(range(len(all_z_row_labels_tukey)), key=lambda i: abs(float(all_z_row_labels_tukey[i]) - z_target_for_table_row_numeric_tukey))
         except ValueError: 
-            closest_row_idx = len(all_z_row_labels) // 2
+            closest_row_idx_tukey = len(all_z_row_labels_tukey) // 2
 
         window_size_z_tukey = 5
-        start_idx_z_tukey = max(0, closest_row_idx - window_size_z_tukey)
-        end_idx_z_tukey = min(len(all_z_row_labels), closest_row_idx + window_size_z_tukey + 1)
-        z_table_display_rows_str_tukey = all_z_row_labels[start_idx_z_tukey:end_idx_z_tukey]
+        start_idx_z_tukey = max(0, closest_row_idx_tukey - window_size_z_tukey)
+        end_idx_z_tukey = min(len(all_z_row_labels_tukey), closest_row_idx_tukey + window_size_z_tukey + 1)
+        z_table_display_rows_str_tukey = all_z_row_labels_tukey[start_idx_z_tukey:end_idx_z_tukey]
 
         table_data_z_lookup_tukey = []
         for z_r_str_idx in z_table_display_rows_str_tukey:
             z_r_val = float(z_r_str_idx)
             row = { 'z': z_r_str_idx } 
-            for z_c_str_idx in z_col_labels_str:
+            for z_c_str_idx in z_col_labels_str_tukey:
                 z_c_val = float(z_c_str_idx)
                 current_z_val = round(z_r_val + z_c_val, 2)
                 prob = stats.norm.cdf(current_z_val)
@@ -1223,7 +1221,7 @@ def tab_tukey_hsd():
         def style_z_lookup_table_tukey(df_to_style):
             data = df_to_style 
             style_df = pd.DataFrame('', index=data.index, columns=data.columns)
-            z_crit_val_to_highlight = z_crit_for_table if not np.isnan(z_crit_for_table) else 0.0
+            z_crit_val_to_highlight = z_crit_for_table_tukey
             
             try:
                 z_target_base_numeric = round(z_crit_val_to_highlight,1) 
@@ -1263,17 +1261,17 @@ def tab_tukey_hsd():
         st.subheader("P-value Calculation Explanation (Normal Approximation)")
         p_val_calc_tukey_approx = float('nan')
         
-        if tukey_tail_selection == "Two-tailed":
-            p_val_calc_tukey_approx = 2 * stats.norm.sf(abs(test_stat_tukey_q))
+        if tukey_tail_selection_approx == "Two-tailed":
+            p_val_calc_tukey_approx = 2 * stats.norm.sf(abs(test_stat_tukey_q_as_z))
         else: # One-tailed (right)
-            p_val_calc_tukey_approx = stats.norm.sf(test_stat_tukey_q)
+            p_val_calc_tukey_approx = stats.norm.sf(test_stat_tukey_q_as_z)
         p_val_calc_tukey_approx = min(p_val_calc_tukey_approx, 1.0) if not np.isnan(p_val_calc_tukey_approx) else float('nan')
 
         st.markdown(f"""
-        The input q-statistic ({test_stat_tukey_q:.3f}) is being compared against critical values from the standard normal (z) distribution.
-        The p-value is calculated assuming the input q-statistic is a z-score:
-        * **Two-tailed**: `2 * P(Z ≥ |{test_stat_tukey_q:.3f}|)`
-        * **One-tailed (right)**: `P(Z ≥ {test_stat_tukey_q:.3f})`
+        The input statistic ({test_stat_tukey_q_as_z:.3f}) is treated as a z-score.
+        The p-value is then derived from the standard normal distribution:
+        * **Two-tailed**: `2 * P(Z ≥ |{test_stat_tukey_q_as_z:.3f}|)`
+        * **One-tailed (right)**: `P(Z ≥ {test_stat_tukey_q_as_z:.3f})`
         **Disclaimer**: This is a rough approximation and not a standard Tukey HSD p-value.
         """)
 
@@ -1283,30 +1281,30 @@ def tab_tukey_hsd():
         decision_crit_tukey_approx = False
         comparison_crit_str_tukey = "N/A"
 
-        if tukey_tail_selection == "Two-tailed":
-            crit_val_tukey_display = f"±{format_value_for_display(z_crit_upper_tukey)}" if z_crit_upper_tukey is not None else "N/A"
-            if z_crit_upper_tukey is not None and not np.isnan(z_crit_upper_tukey):
-                decision_crit_tukey_approx = abs(test_stat_tukey_q) > z_crit_upper_tukey
-            comparison_crit_str_tukey = f"|Input q (as z) ({abs(test_stat_tukey_q):.3f})| {' > ' if decision_crit_tukey_approx else ' ≤ '} z_crit ({format_value_for_display(z_crit_upper_tukey)})"
+        if tukey_tail_selection_approx == "Two-tailed":
+            crit_val_tukey_display = f"±{format_value_for_display(z_crit_upper_tukey_approx)}" if z_crit_upper_tukey_approx is not None else "N/A"
+            if z_crit_upper_tukey_approx is not None and not np.isnan(z_crit_upper_tukey_approx):
+                decision_crit_tukey_approx = abs(test_stat_tukey_q_as_z) > z_crit_upper_tukey_approx
+            comparison_crit_str_tukey = f"|Input Stat (as z) ({abs(test_stat_tukey_q_as_z):.3f})| {' > ' if decision_crit_tukey_approx else ' ≤ '} z_crit ({format_value_for_display(z_crit_upper_tukey_approx)})"
         else: # One-tailed (right)
-            crit_val_tukey_display = format_value_for_display(z_crit_upper_tukey) if z_crit_upper_tukey is not None else "N/A"
-            if z_crit_upper_tukey is not None and not np.isnan(z_crit_upper_tukey):
-                decision_crit_tukey_approx = test_stat_tukey_q > z_crit_upper_tukey
-            comparison_crit_str_tukey = f"Input q (as z) ({test_stat_tukey_q:.3f}) {' > ' if decision_crit_tukey_approx else ' ≤ '} z_crit ({format_value_for_display(z_crit_upper_tukey)})"
+            crit_val_tukey_display = format_value_for_display(z_crit_upper_tukey_approx) if z_crit_upper_tukey_approx is not None else "N/A"
+            if z_crit_upper_tukey_approx is not None and not np.isnan(z_crit_upper_tukey_approx):
+                decision_crit_tukey_approx = test_stat_tukey_q_as_z > z_crit_upper_tukey_approx
+            comparison_crit_str_tukey = f"Input Stat (as z) ({test_stat_tukey_q_as_z:.3f}) {' > ' if decision_crit_tukey_approx else ' ≤ '} z_crit ({format_value_for_display(z_crit_upper_tukey_approx)})"
 
         decision_p_alpha_tukey_approx = p_val_calc_tukey_approx < alpha_tukey if not np.isnan(p_val_calc_tukey_approx) else False
             
         st.markdown(f"""
-        1.  **Approximate Critical z-value ({tukey_tail_selection})**: {crit_val_tukey_display}
+        1.  **Approximate Critical z-value ({tukey_tail_selection_approx})**: {crit_val_tukey_display}
             * *Significance level (α)*: {alpha_tukey:.4f}
-        2.  **Input q-statistic (treated as z-score for this approx.)**: {test_stat_tukey_q:.3f}
+        2.  **Input Statistic (treated as z-score)**: {test_stat_tukey_q_as_z:.3f}
             * *Approximate p-value (from z-dist)*: {format_value_for_display(p_val_calc_tukey_approx, decimals=4)} ({apa_p_value(p_val_calc_tukey_approx)})
         3.  **Decision (Approx. Critical Value Method)**: H₀ (no difference) is **{'rejected' if decision_crit_tukey_approx else 'not rejected'}**.
             * *Reason*: {comparison_crit_str_tukey}.
         4.  **Decision (Approx. p-value Method)**: H₀ (no difference) is **{'rejected' if decision_p_alpha_tukey_approx else 'not rejected'}**.
             * *Reason*: {apa_p_value(p_val_calc_tukey_approx)} is {'less than' if decision_p_alpha_tukey_approx else 'not less than'} α ({alpha_tukey:.4f}).
         5.  **APA 7 Style Report (using Normal Approximation)**:
-            Using a normal approximation for comparison, a q-statistic of {test_stat_tukey_q:.2f} (k={k_tukey_selected}, df<sub>error</sub>={df_error_tukey_selected}) yielded an approximate {apa_p_value(p_val_calc_tukey_approx)}. The null hypothesis of no difference for this pair was {'rejected' if decision_p_alpha_tukey_approx else 'not rejected'} at α = {alpha_tukey:.2f}. (Note: This is a z-distribution based approximation, not a standard Tukey HSD test).
+            Using a normal approximation for comparison, an input statistic of {test_stat_tukey_q_as_z:.2f} (for k={k_tukey_selected} groups, df<sub>error</sub>={df_error_tukey_selected}) yielded an approximate {apa_p_value(p_val_calc_tukey_approx)}. The null hypothesis of no difference for this pair was {'rejected' if decision_p_alpha_tukey_approx else 'not rejected'} at α = {alpha_tukey:.2f}. (Note: This is a z-distribution based approximation, not a standard Tukey HSD test).
         """)
 
 
@@ -1589,7 +1587,7 @@ def main():
     This application provides an interactive way to explore various statistical distributions and tests. 
     Select a tab to begin. On each tab, you can adjust parameters like alpha, degrees of freedom, 
     and input a calculated test statistic to see how it compares to critical values and to understand p-value calculations.
-    **Ensure you have `statsmodels` installed in your environment for full functionality on the Tukey HSD tab (e.g., by adding `statsmodels` to your `requirements.txt` file).**
+    **Note for Tukey HSD Tab**: This tab uses a simplified normal (z) distribution approximation. For accurate Tukey HSD results, ensure `statsmodels` is installed in your environment (e.g., add `statsmodels` to `requirements.txt`) and consult statistical software that properly implements the Studentized Range (q) distribution.
     """)
 
     tab_names = [
