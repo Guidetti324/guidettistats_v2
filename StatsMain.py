@@ -52,8 +52,8 @@ def get_dynamic_df_window(all_df_options, selected_df_val, window_size=5):
             elif isinstance(option, (int, float)) or \
                  (isinstance(option, str) and option.replace('.', '', 1).replace('-', '', 1).isdigit()):
                 comparable_options.append(float(option))
-            else: # If not numeric-like or 'z (∞)', assign a value that won't match easily
-                comparable_options.append(float('-inf')) 
+            else: 
+                comparable_options.append(float('-inf')) # Should not be reached if all_df_options are well-formed
 
         for i, option_val_numeric in enumerate(comparable_options):
             diff = abs(option_val_numeric - temp_selected_df)
@@ -824,7 +824,9 @@ def tab_mann_whitney_u():
         st.subheader("Standard Normal Table: Cumulative P(Z < z)")
         st.markdown("This table shows the area to the left of a given z-score. The z-critical value (derived from your alpha and tail selection) is used for highlighting.")
         
-        z_crit_for_table_mw = crit_z_upper_mw_plot if tail_mw == "One-tailed (right)" else (crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None and tail_mw == "Two-tailed" else (crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None else 0.0) )
+        z_crit_for_table_mw = crit_z_upper_mw_plot if tail_mw == "One-tailed (right)" else \
+                              (crit_z_upper_mw_plot if crit_z_upper_mw_plot is not None and tail_mw == "Two-tailed" else \
+                              (crit_z_lower_mw_plot if crit_z_lower_mw_plot is not None else 0.0) )
         if np.isnan(z_crit_for_table_mw): z_crit_for_table_mw = 0.0
 
 
@@ -998,7 +1000,9 @@ def tab_wilcoxon_t():
         st.subheader("Standard Normal Table: Cumulative P(Z < z)")
         st.markdown("This table shows the area to the left of a given z-score. The z-critical value (derived from your alpha and tail selection) is used for highlighting.")
 
-        z_crit_for_table_w = crit_z_upper_w_plot if tail_w == "One-tailed (right)" else (crit_z_upper_w_plot if crit_z_upper_w_plot is not None and tail_w == "Two-tailed" else (crit_z_lower_w_plot if crit_z_lower_w_plot is not None else 0.0) )
+        z_crit_for_table_w = crit_z_upper_w_plot if tail_w == "One-tailed (right)" else \
+                             (crit_z_upper_w_plot if crit_z_upper_w_plot is not None and tail_w == "Two-tailed" else \
+                             (crit_z_lower_w_plot if crit_z_lower_w_plot is not None else 0.0) )
         if np.isnan(z_crit_for_table_w): z_crit_for_table_w = 0.0
         
         all_z_row_labels_w = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
@@ -1227,7 +1231,6 @@ def tab_tukey_hsd():
     with col1:
         st.subheader("Inputs for Normal Approximation")
         alpha_tukey = st.number_input("Alpha (α) for z-comparison", 0.0001, 0.5, 0.05, 0.0001, format="%.4f", key="alpha_tukey_approx_input")
-        # k_tukey_selected and df_error_tukey_selected are for context only in APA report
         k_tukey_selected = st.number_input("Number of Groups (k) (for context)", min_value=2, value=3, step=1, key="k_tukey_context_selectbox") 
         df_error_tukey_selected = st.number_input("Degrees of Freedom for Error (df_error) (for context)", min_value=1, value=20, step=1, key="df_error_context_selectbox")
         
@@ -1287,8 +1290,8 @@ def tab_tukey_hsd():
 
         z_crit_for_table_tukey = z_crit_upper_tukey_approx if tukey_tail_selection_approx == "One-tailed (right)" else \
                                 (z_crit_upper_tukey_approx if z_crit_upper_tukey_approx is not None and tukey_tail_selection_approx == "Two-tailed" else \
-                                (z_crit_lower_tukey_approx if z_crit_lower_tukey_approx is not None else 0.0) ) # Use lower for two-tailed if upper is None (should not happen)
-        if np.isnan(z_crit_for_table_tukey): z_crit_for_table_tukey = 0.0
+                                (z_crit_lower_tukey_approx if z_crit_lower_tukey_approx is not None else 0.0) )
+        if z_crit_for_table_tukey is None or np.isnan(z_crit_for_table_tukey): z_crit_for_table_tukey = 0.0
 
 
         all_z_row_labels_tukey = [f"{val:.1f}" for val in np.round(np.arange(-3.4, 3.5, 0.1), 1)]
